@@ -1,0 +1,22 @@
+{
+  "name": "shipnow-api",
+  "version": "1.0.0",
+  "description": "API de ShipNow con arquitectura por capas (Controller - Service - Repository)",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "author": "Roman Ferrero",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^18.0.2",
+    "express": "^5.2.1",
+    "mongoose": "^9.10.1"
+  }
+}
