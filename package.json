@@ -14,6 +14,7 @@
   "author": "Roman Ferrero",
   "license": "ISC",
   "dependencies": {
+    "@faker-js/faker": "^10.6.0",
     "bcryptjs": "^3.0.3",
     "dotenv": "^18.0.2",
     "express": "^5.2.1",
