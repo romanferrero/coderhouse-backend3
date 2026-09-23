@@ -39,13 +39,11 @@ class UserRepository {
     return UserModel.countDocuments({ role });
   }
 
-  async findIdsByRole(role) {
-    return UserModel.distinct('_id', { role });
-  }
-
-  async findIdsByEmailDomain(domain) {
+  async findIdsByEmailDomain(domain, { role } = {}) {
     const escaped = domain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return UserModel.distinct('_id', { email: new RegExp(`@${escaped}$`) });
+    const filter = { email: new RegExp(`@${escaped}$`) };
+    if (role) filter.role = role;
+    return UserModel.distinct('_id', filter);
   }
 
   async create(data) {
