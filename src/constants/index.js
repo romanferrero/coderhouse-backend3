@@ -78,4 +78,6 @@ export const MOCKS = Object.freeze({
   PASSWORD: 'coder123',
   // Roles que se generan al azar si no se pide uno en particular.
   RANDOM_ROLES: Object.freeze([USER_ROLES.USER, USER_ROLES.COURIER]),
+  // Cantidades por defecto de la carga completa (POST /api/mocks/seed).
+  DATASET: Object.freeze({ USERS: 10, COURIERS: 3, ORDERS: 20 }),
 });

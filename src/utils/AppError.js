@@ -13,6 +13,10 @@ export default class AppError extends Error {
     return new AppError(message, HTTP_STATUS.BAD_REQUEST);
   }
 
+  static forbidden(message) {
+    return new AppError(message, HTTP_STATUS.FORBIDDEN);
+  }
+
   static notFound(message) {
     return new AppError(message, HTTP_STATUS.NOT_FOUND);
   }
