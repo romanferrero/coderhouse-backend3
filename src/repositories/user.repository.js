@@ -39,9 +39,29 @@ class UserRepository {
     return UserModel.countDocuments({ role });
   }
 
+  async findIdsByRole(role) {
+    return UserModel.distinct('_id', { role });
+  }
+
+  async findIdsByEmailDomain(domain) {
+    const escaped = domain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return UserModel.distinct('_id', { email: new RegExp(`@${escaped}$`) });
+  }
+
   async create(data) {
     const created = await UserModel.create(data);
     return this.findById(created._id);
+  }
+
+  // Inserción masiva: corre las validaciones del esquema y devuelve la cantidad insertada.
+  async createMany(users) {
+    const created = await UserModel.insertMany(users);
+    return created.length;
+  }
+
+  async deleteByIds(ids) {
+    const { deletedCount } = await UserModel.deleteMany({ _id: { $in: ids } });
+    return deletedCount;
   }
 
   async updateById(id, data) {
