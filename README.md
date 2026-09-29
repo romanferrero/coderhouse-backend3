@@ -89,6 +89,8 @@ HTTP → Router → Controller → Service → Repository → Model (Mongoose) �
 
 - Los **Controllers** nunca importan Mongoose: solo conocen al Service.
 - Los **Services** lanzan `AppError` con el status adecuado (400, 404, 409); el middleware `errorHandler` lo traduce a la respuesta.
+- Los Services rechazan con `400` los campos obligatorios vacíos o con solo espacios, tanto al crear como al actualizar (PUT).
+- Como red de seguridad, `errorHandler` también traduce los errores de Mongoose que lleguen hasta él: `ValidationError` y `CastError` → `400`, clave duplicada (`E11000`) → `409`. Un dato inválido nunca termina en `500`.
 - `process.env` solo se lee en `src/config/env.config.js`.
 
 ## Módulo de mocking — `/api/mocks`
@@ -198,8 +200,8 @@ Todos los usuarios generados tienen la contraseña `coder123`, guardada hasheada
 | ---------- | ------ |
 | Usuario    | Misma forma que `UserModel` (`first_name`, `last_name`, `email`, `age`, `password`, `role`). El rol siempre sale de `USER_ROLES`. |
 | Repartidor | Es un usuario con rol `USER_ROLES.COURIER`. |
-| Pedido     | `customer` referencia a un usuario `USER`. `status` sale de `ORDER_STATUS` y `priority` de `ORDER_PRIORITY`. El `total` se calcula a partir de los ítems. |
-| Entrega    | Una por pedido (`order` es único). El `status` **no es aleatorio**: se deriva del estado del pedido con `DELIVERY_STATUS_BY_ORDER_STATUS`. Lleva `courier` solo si el estado está en `DELIVERY_STATUSES_WITH_COURIER` (el esquema también lo exige). `deliveredAt` solo si fue entregada, y `estimatedAt` depende de la prioridad. |
+| Pedido     | `customer` referencia a un usuario `USER`. `status` sale de `ORDER_STATUS` y `priority` de `ORDER_PRIORITY`. El `total` se calcula a partir de los ítems. `createdAt` cae en los últimos 30 días. |
+| Entrega    | Una por pedido (`order` es único). El `status` **no es aleatorio**: se deriva del estado del pedido con `DELIVERY_STATUS_BY_ORDER_STATUS`. Lleva `courier` solo si el estado está en `DELIVERY_STATUSES_WITH_COURIER` (el esquema también lo exige). Las fechas nunca son anteriores a la creación del pedido: la entrega se crea junto con él (`createdAt` igual), `estimatedAt` se calcula desde esa fecha según la prioridad y `deliveredAt` (solo si fue entregada) cae entre la creación del pedido y hoy. |
 
 | Estado del pedido | Estado de la entrega | Repartidor |
 | ----------------- | -------------------- | ---------- |
