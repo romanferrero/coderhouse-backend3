@@ -5,6 +5,8 @@ const MAX_ITEMS = 4;
 const MAX_QUANTITY = 5;
 const MIN_UNIT_PRICE = 500;
 const MAX_UNIT_PRICE = 80000;
+// Antigüedad máxima de un pedido simulado: deja margen para que haya entregas ya hechas.
+const MAX_ORDER_AGE_DAYS = 30;
 
 const generateItem = () => ({
   title: faker.commerce.productName(),
@@ -31,6 +33,8 @@ export const generateOrder = ({ customerId }) => {
     },
     status: faker.helpers.arrayElement(Object.values(ORDER_STATUS)),
     priority: faker.helpers.arrayElement(Object.values(ORDER_PRIORITY)),
+    // Fecha de creación en el pasado: las fechas de la entrega se calculan a partir de esta.
+    createdAt: faker.date.recent({ days: MAX_ORDER_AGE_DAYS }),
   };
 };
 
