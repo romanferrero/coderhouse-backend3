@@ -3,6 +3,7 @@ import userRepository from '../repositories/user.repository.js';
 import { USER_ROLES, PASSWORD_SALT_ROUNDS } from '../constants/index.js';
 import AppError from '../utils/AppError.js';
 import { pick } from '../utils/pick.js';
+import { findBlankFields, findBlankProvidedFields } from '../utils/validation.js';
 import { normalizePagination, buildPaginatedResult } from '../utils/pagination.js';
 
 const CREATE_FIELDS = ['first_name', 'last_name', 'email', 'age', 'password'];
@@ -71,7 +72,7 @@ class UserService {
   async createUser(payload) {
     const data = pick(payload, CREATE_FIELDS);
 
-    const missing = REQUIRED_FIELDS.filter((field) => data[field] === undefined || data[field] === '');
+    const missing = findBlankFields(data, REQUIRED_FIELDS);
     if (missing.length > 0) {
       throw AppError.badRequest(`Faltan campos obligatorios: ${missing.join(', ')}.`);
     }
@@ -90,6 +91,11 @@ class UserService {
     const data = pick(payload, UPDATE_FIELDS);
     if (Object.keys(data).length === 0) {
       throw AppError.badRequest(`No se enviaron campos para actualizar. Permitidos: ${UPDATE_FIELDS.join(', ')}.`);
+    }
+
+    const blank = findBlankProvidedFields(data, REQUIRED_FIELDS);
+    if (blank.length > 0) {
+      throw AppError.badRequest(`Estos campos no pueden quedar vacíos: ${blank.join(', ')}.`);
     }
     this.validateFields(data);
 

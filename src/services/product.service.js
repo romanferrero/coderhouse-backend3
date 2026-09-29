@@ -2,6 +2,7 @@ import productRepository from '../repositories/product.repository.js';
 import { PRODUCT_STATUS } from '../constants/index.js';
 import AppError from '../utils/AppError.js';
 import { pick } from '../utils/pick.js';
+import { findBlankFields, findBlankProvidedFields } from '../utils/validation.js';
 import { normalizePagination, buildPaginatedResult } from '../utils/pagination.js';
 
 const CREATE_FIELDS = ['title', 'description', 'code', 'price', 'stock', 'category'];
@@ -53,7 +54,7 @@ class ProductService {
   async createProduct(payload) {
     const data = pick(payload, CREATE_FIELDS);
 
-    const missing = REQUIRED_FIELDS.filter((field) => data[field] === undefined || data[field] === '');
+    const missing = findBlankFields(data, REQUIRED_FIELDS);
     if (missing.length > 0) {
       throw AppError.badRequest(`Faltan campos obligatorios: ${missing.join(', ')}.`);
     }
@@ -72,6 +73,11 @@ class ProductService {
     const data = pick(payload, UPDATE_FIELDS);
     if (Object.keys(data).length === 0) {
       throw AppError.badRequest(`No se enviaron campos para actualizar. Permitidos: ${UPDATE_FIELDS.join(', ')}.`);
+    }
+
+    const blank = findBlankProvidedFields(data, REQUIRED_FIELDS);
+    if (blank.length > 0) {
+      throw AppError.badRequest(`Estos campos no pueden quedar vacíos: ${blank.join(', ')}.`);
     }
     this.validateNumbers(data);
 
