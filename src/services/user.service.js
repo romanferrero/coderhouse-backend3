@@ -1,7 +1,16 @@
 import bcrypt from 'bcryptjs';
 import userRepository from '../repositories/user.repository.js';
 import { USER_ROLES, PASSWORD_SALT_ROUNDS } from '../constants/index.js';
-import AppError from '../utils/AppError.js';
+import {
+  InvalidDataError,
+  InvalidRoleError,
+  MissingFieldsError,
+  BlankFieldsError,
+  NoFieldsToUpdateError,
+  UserNotFoundError,
+  EmailAlreadyRegisteredError,
+  LastAdminError,
+} from '../errors/index.js';
 import { pick } from '../utils/pick.js';
 import { findBlankFields, findBlankProvidedFields } from '../utils/validation.js';
 import { normalizePagination, buildPaginatedResult } from '../utils/pagination.js';
@@ -20,19 +29,21 @@ class UserService {
 
   validateFields({ email, password, age }) {
     if (email !== undefined && !EMAIL_REGEX.test(email)) {
-      throw AppError.badRequest('El email no tiene un formato válido.');
+      throw new InvalidDataError('El email no tiene un formato válido.', { field: 'email' });
     }
     if (password !== undefined && String(password).length < MIN_PASSWORD_LENGTH) {
-      throw AppError.badRequest(`La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`);
+      throw new InvalidDataError(`La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`, {
+        field: 'password',
+      });
     }
     if (age !== undefined && (!Number.isInteger(age) || age < 0)) {
-      throw AppError.badRequest('La edad debe ser un número entero mayor o igual a 0.');
+      throw new InvalidDataError('La edad debe ser un número entero mayor o igual a 0.', { field: 'age' });
     }
   }
 
   validateRole(role) {
     if (!VALID_ROLES.includes(role)) {
-      throw AppError.badRequest(`Rol inválido. Valores permitidos: ${VALID_ROLES.join(', ')}.`);
+      throw new InvalidRoleError(role, VALID_ROLES);
     }
   }
 
@@ -45,7 +56,7 @@ class UserService {
     if (user.role !== USER_ROLES.ADMIN) return;
     const admins = await this.repository.countByRole(USER_ROLES.ADMIN);
     if (admins <= 1) {
-      throw AppError.conflict('No se puede quitar o eliminar al último usuario ADMIN.');
+      throw new LastAdminError();
     }
   }
 
@@ -64,7 +75,7 @@ class UserService {
 
   async getUserById(id) {
     const user = await this.repository.findById(id);
-    if (!user) throw AppError.notFound(`Usuario con id "${id}" no encontrado.`);
+    if (!user) throw new UserNotFoundError(id);
     return user;
   }
 
@@ -74,12 +85,12 @@ class UserService {
 
     const missing = findBlankFields(data, REQUIRED_FIELDS);
     if (missing.length > 0) {
-      throw AppError.badRequest(`Faltan campos obligatorios: ${missing.join(', ')}.`);
+      throw new MissingFieldsError(missing);
     }
     this.validateFields(data);
 
     if (await this.repository.existsByEmail(data.email)) {
-      throw AppError.conflict(`El email "${data.email}" ya está registrado.`);
+      throw new EmailAlreadyRegisteredError(data.email);
     }
 
     data.password = await this.hashPassword(data.password);
@@ -90,19 +101,19 @@ class UserService {
   async updateUser(id, payload) {
     const data = pick(payload, UPDATE_FIELDS);
     if (Object.keys(data).length === 0) {
-      throw AppError.badRequest(`No se enviaron campos para actualizar. Permitidos: ${UPDATE_FIELDS.join(', ')}.`);
+      throw new NoFieldsToUpdateError(UPDATE_FIELDS);
     }
 
     const blank = findBlankProvidedFields(data, REQUIRED_FIELDS);
     if (blank.length > 0) {
-      throw AppError.badRequest(`Estos campos no pueden quedar vacíos: ${blank.join(', ')}.`);
+      throw new BlankFieldsError(blank);
     }
     this.validateFields(data);
 
     await this.getUserById(id);
 
     if (data.email && (await this.repository.existsByEmail(data.email, id))) {
-      throw AppError.conflict(`El email "${data.email}" ya está registrado.`);
+      throw new EmailAlreadyRegisteredError(data.email);
     }
 
     if (data.password) data.password = await this.hashPassword(data.password);

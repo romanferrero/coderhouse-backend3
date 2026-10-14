@@ -1,6 +1,14 @@
 import productRepository from '../repositories/product.repository.js';
 import { PRODUCT_STATUS } from '../constants/index.js';
-import AppError from '../utils/AppError.js';
+import {
+  InvalidDataError,
+  InvalidStatusError,
+  MissingFieldsError,
+  BlankFieldsError,
+  NoFieldsToUpdateError,
+  ProductNotFoundError,
+  ProductCodeAlreadyExistsError,
+} from '../errors/index.js';
 import { pick } from '../utils/pick.js';
 import { findBlankFields, findBlankProvidedFields } from '../utils/validation.js';
 import { normalizePagination, buildPaginatedResult } from '../utils/pagination.js';
@@ -22,10 +30,10 @@ class ProductService {
 
   validateNumbers({ price, stock }) {
     if (price !== undefined && (typeof price !== 'number' || price < 0)) {
-      throw AppError.badRequest('El precio debe ser un número mayor o igual a 0.');
+      throw new InvalidDataError('El precio debe ser un número mayor o igual a 0.', { field: 'price' });
     }
     if (stock !== undefined && (!Number.isInteger(stock) || stock < 0)) {
-      throw AppError.badRequest('El stock debe ser un número entero mayor o igual a 0.');
+      throw new InvalidDataError('El stock debe ser un número entero mayor o igual a 0.', { field: 'stock' });
     }
   }
 
@@ -34,7 +42,7 @@ class ProductService {
   async getProducts({ page, limit, category, status } = {}) {
     const requestedStatus = status ? String(status).toUpperCase() : PRODUCT_STATUS.AVAILABLE;
     if (!LISTABLE_STATUSES.includes(requestedStatus)) {
-      throw AppError.badRequest(`Estado inválido. Valores permitidos: ${LISTABLE_STATUSES.join(', ')}.`);
+      throw new InvalidStatusError(status, LISTABLE_STATUSES);
     }
 
     const filter = { status: requestedStatus };
@@ -47,7 +55,7 @@ class ProductService {
 
   async getProductById(id) {
     const product = await this.repository.findById(id);
-    if (!product) throw AppError.notFound(`Producto con id "${id}" no encontrado.`);
+    if (!product) throw new ProductNotFoundError(id);
     return product;
   }
 
@@ -56,12 +64,12 @@ class ProductService {
 
     const missing = findBlankFields(data, REQUIRED_FIELDS);
     if (missing.length > 0) {
-      throw AppError.badRequest(`Faltan campos obligatorios: ${missing.join(', ')}.`);
+      throw new MissingFieldsError(missing);
     }
     this.validateNumbers(data);
 
     if (await this.repository.existsByCode(data.code)) {
-      throw AppError.conflict(`Ya existe un producto con el código "${data.code}".`);
+      throw new ProductCodeAlreadyExistsError(data.code);
     }
 
     data.stock = data.stock ?? 0;
@@ -72,19 +80,19 @@ class ProductService {
   async updateProduct(id, payload) {
     const data = pick(payload, UPDATE_FIELDS);
     if (Object.keys(data).length === 0) {
-      throw AppError.badRequest(`No se enviaron campos para actualizar. Permitidos: ${UPDATE_FIELDS.join(', ')}.`);
+      throw new NoFieldsToUpdateError(UPDATE_FIELDS);
     }
 
     const blank = findBlankProvidedFields(data, REQUIRED_FIELDS);
     if (blank.length > 0) {
-      throw AppError.badRequest(`Estos campos no pueden quedar vacíos: ${blank.join(', ')}.`);
+      throw new BlankFieldsError(blank);
     }
     this.validateNumbers(data);
 
     await this.getProductById(id);
 
     if (data.code && (await this.repository.existsByCode(data.code, id))) {
-      throw AppError.conflict(`Ya existe un producto con el código "${data.code}".`);
+      throw new ProductCodeAlreadyExistsError(data.code);
     }
 
     if (data.stock !== undefined) data.status = this.resolveStatus(data.stock);

@@ -1,6 +1,6 @@
 import deliveryRepository from '../repositories/delivery.repository.js';
 import { DELIVERY_STATUS } from '../constants/index.js';
-import AppError from '../utils/AppError.js';
+import { InvalidStatusError, DeliveryNotFoundError } from '../errors/index.js';
 import { normalizePagination, buildPaginatedResult } from '../utils/pagination.js';
 
 const VALID_STATUSES = Object.values(DELIVERY_STATUS);
@@ -15,7 +15,7 @@ class DeliveryService {
     if (status) {
       const normalizedStatus = String(status).toUpperCase();
       if (!VALID_STATUSES.includes(normalizedStatus)) {
-        throw AppError.badRequest(`Estado inválido. Valores permitidos: ${VALID_STATUSES.join(', ')}.`);
+        throw new InvalidStatusError(status, VALID_STATUSES);
       }
       filter.status = normalizedStatus;
     }
@@ -27,7 +27,7 @@ class DeliveryService {
 
   async getDeliveryById(id) {
     const delivery = await this.repository.findById(id);
-    if (!delivery) throw AppError.notFound(`Entrega con id "${id}" no encontrada.`);
+    if (!delivery) throw new DeliveryNotFoundError(id);
     return delivery;
   }
 }
