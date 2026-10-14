@@ -1,10 +1,11 @@
 # ShipNow API
 
-API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y repartidores), **pedidos** y **entregas**, con arquitectura por capas (**Router → Controller → Service → Repository → Model**), configuración de entorno centralizada y un **módulo de mocking** para generar y cargar datos de prueba.
+API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y repartidores), **pedidos** y **entregas**, con arquitectura por capas (**Router → Controller → Service → Repository → Model**), configuración de entorno centralizada, un **módulo de mocking** para generar y cargar datos de prueba y una **capa centralizada de manejo de errores**.
 
-> Pre-entregas Módulo 1 (arquitectura por capas) y Módulo 2 (mocking y carga de datos) — Backend III (Coderhouse).
+> Pre-entregas Módulo 1 (arquitectura por capas), Módulo 2 (mocking y carga de datos) y Módulo 3 (manejo profesional de errores) — Backend III (Coderhouse).
 
 - [Cómo correrlo localmente](#cómo-correrlo-localmente)
+- [Manejo de errores](#manejo-de-errores)
 - [Módulo de mocking — `/api/mocks`](#módulo-de-mocking--apimocks)
 - [Endpoints](#endpoints)
 - [Constantes](#constantes)
@@ -66,15 +67,16 @@ src/
 │   └── index.js           # re-export de la config
 ├── constants/
 │   └── index.js           # roles, estados, prioridades, HTTP_STATUS, MOCKS (Object.freeze)
-├── controllers/           # req/res: leen parámetros, llaman al Service y eligen el status code
+├── controllers/           # req/res: leen parámetros, llaman al Service y eligen el status de éxito
 ├── services/              # lógica y reglas de negocio (incluye mock.service.js)
 ├── repositories/          # único lugar que usa Mongoose (consultas, filtros, proyecciones)
 ├── models/                # solo esquemas de Mongoose (user, product, order, delivery)
 ├── mocks/                 # generadores de datos simulados (funciones puras con Faker)
 ├── routes/                # path → método del Controller, nada más
-├── middlewares/           # 404 y manejo centralizado de errores
+├── errors/                # diccionario de errores, AppError y errores personalizados del dominio
+├── middlewares/           # errorHandler: único lugar que arma respuestas de error
 ├── db/                    # conexión a MongoDB
-├── utils/                 # AppError, paginación, helpers
+├── utils/                 # paginación, helpers
 ├── app.js                 # instancia de Express
 └── server.js              # punto de entrada: conecta la DB y levanta el servidor
 ```
@@ -83,15 +85,179 @@ src/
 
 ```
 HTTP → Router → Controller → Service → Repository → Model (Mongoose) → MongoDB
-                    ↑            │
-                    └─ AppError ─┘ → errorHandler → respuesta JSON
+                    │            │
+                    │            └─ throw new UserNotFoundError(id)
+                    └─ no lo atrapa: Express lo deriva → errorHandler → respuesta JSON
 ```
 
 - Los **Controllers** nunca importan Mongoose: solo conocen al Service.
-- Los **Services** lanzan `AppError` con el status adecuado (400, 404, 409); el middleware `errorHandler` lo traduce a la respuesta.
+- Los **Services** detectan los casos inválidos y lanzan un error personalizado del dominio; el middleware `errorHandler` es el único que lo convierte en respuesta (ver [Manejo de errores](#manejo-de-errores)).
 - Los Services rechazan con `400` los campos obligatorios vacíos o con solo espacios, tanto al crear como al actualizar (PUT).
-- Como red de seguridad, `errorHandler` también traduce los errores de Mongoose que lleguen hasta él: `ValidationError` y `CastError` → `400`, clave duplicada (`E11000`) → `409`. Un dato inválido nunca termina en `500`.
 - `process.env` solo se lee en `src/config/env.config.js`.
+
+## Manejo de errores
+
+Ninguna ruta ni controller arma respuestas de error: todo error termina en el middleware global `errorHandler`, que es el único punto de la API que responde ante una falla.
+
+### Estructura de la respuesta de error
+
+Todos los errores, de cualquier módulo, responden con la misma forma:
+
+```json
+{
+  "status": "error",
+  "code": "USER_NOT_FOUND",
+  "message": "Usuario con id \"123\" no encontrado.",
+  "details": { "id": "123" }
+}
+```
+
+| Campo     | Descripción |
+| --------- | ----------- |
+| `status`  | Siempre `"error"` (las respuestas correctas usan `"success"` y `payload`). |
+| `code`    | Identificador estable del error, tomado del diccionario. Es lo que debería leer el cliente para decidir qué hacer. |
+| `message` | Explicación legible del problema. |
+| `details` | Datos extra del caso (campos faltantes, valores permitidos, parámetro recibido, etc.) o `null`. Siempre está presente. |
+
+El status HTTP de la respuesta también sale del diccionario.
+
+### Las tres piezas
+
+```
+src/errors/
+├── errorDictionary.js   # diccionario: code + status HTTP + mensaje por defecto de cada error
+├── AppError.js          # clase base; se construye a partir de una entrada del diccionario
+├── customErrors.js      # errores del dominio: UserNotFoundError, InvalidStatusError, NegativeMockQuantityError…
+└── index.js
+src/middlewares/errorHandler.js   # middleware global
+```
+
+Cómo se reparte el trabajo entre capas:
+
+1. **Service**: detecta el caso inválido y lanza el error del dominio. No sabe nada de `res`.
+
+   ```js
+   if (!user) throw new UserNotFoundError(id);
+   ```
+
+2. **Controller**: no tiene `try/catch` ni respuestas de error. Los métodos son `async` y Express 5 deriva automáticamente cualquier promesa rechazada al middleware de errores (equivale a `next(error)`).
+3. **`errorHandler`**: convierte el error en la respuesta final. Si el error no es propio, lo traduce a uno del diccionario:
+
+   | Lo que llega                                   | Se responde como             |
+   | ---------------------------------------------- | ---------------------------- |
+   | Error personalizado (`AppError`)               | su propio `code` y status    |
+   | `ValidationError` / `CastError` de Mongoose    | `VALIDATION_ERROR` (400)     |
+   | Clave duplicada de MongoDB (`E11000`)          | `DUPLICATE_KEY` (409)        |
+   | Body con JSON mal formado                      | `INVALID_JSON` (400)         |
+   | Ruta inexistente (`notFoundHandler` la deriva) | `ROUTE_NOT_FOUND` (404)      |
+   | Cualquier otra cosa                            | `INTERNAL_SERVER_ERROR` (500) |
+
+Los errores `5xx` se loguean en consola. La causa técnica (por ejemplo, el mensaje del driver de MongoDB) se agrega en `details.cause` solo fuera de producción; con `NODE_ENV=production` nunca se expone.
+
+### Diccionario de errores
+
+| `code`                           | HTTP | Cuándo ocurre |
+| -------------------------------- | ---- | ------------- |
+| `VALIDATION_ERROR`               | 400  | Un campo tiene formato o valor inválido (email, precio, stock, edad…) |
+| `MISSING_REQUIRED_FIELDS`        | 400  | Faltan campos obligatorios al crear |
+| `BLANK_REQUIRED_FIELDS`          | 400  | Se intenta dejar vacío un campo obligatorio al actualizar |
+| `NO_FIELDS_TO_UPDATE`            | 400  | Un `PUT` sin ningún campo editable |
+| `INVALID_ROLE`                   | 400  | Rol fuera de `USER_ROLES` |
+| `INVALID_STATUS`                 | 400  | Estado inválido de producto, pedido o entrega |
+| `INVALID_PRIORITY`               | 400  | Prioridad de pedido inválida |
+| `USER_NOT_FOUND`                 | 404  | Usuario inexistente |
+| `PRODUCT_NOT_FOUND`              | 404  | Producto inexistente |
+| `ORDER_NOT_FOUND`                | 404  | Pedido inexistente |
+| `DELIVERY_NOT_FOUND`             | 404  | Entrega inexistente |
+| `USER_EMAIL_ALREADY_REGISTERED`  | 409  | Email ya registrado |
+| `PRODUCT_CODE_ALREADY_EXISTS`    | 409  | Código de producto repetido |
+| `LAST_ADMIN_REQUIRED`            | 409  | Se intenta degradar o eliminar al último `ADMIN` |
+| `MOCK_INVALID_QUANTITY`          | 400  | La cantidad de mocks no es un entero (`abc`, `2.5`, parámetro repetido) |
+| `MOCK_NEGATIVE_QUANTITY`         | 400  | La cantidad de mocks es negativa |
+| `MOCK_QUANTITY_OUT_OF_RANGE`     | 400  | La cantidad de mocks es `0` o supera `MOCKS.MAX_QTY` (100) |
+| `MOCK_SEED_FORBIDDEN`            | 403  | Se intenta cargar o limpiar datos de prueba en producción |
+| `MOCK_SEED_REQUIREMENTS_NOT_MET` | 409  | Se piden pedidos sin clientes y repartidores de prueba cargados |
+| `MOCK_GENERATION_FAILED`         | 500  | Falla al generar los datos simulados |
+| `MOCK_SEED_FAILED`               | 500  | Falla de MongoDB durante la carga de datos de prueba |
+| `MOCK_CLEAR_FAILED`              | 500  | Falla de MongoDB al limpiar los datos de prueba |
+| `ROUTE_NOT_FOUND`                | 404  | Ruta inexistente |
+| `INVALID_JSON`                   | 400  | El body no es un JSON válido |
+| `PAYLOAD_TOO_LARGE`              | 413  | El body supera el tamaño permitido |
+| `BAD_REQUEST`                    | 400  | Otra solicitud mal formada (ej. parámetro de URL mal codificado) |
+| `DUPLICATE_KEY`                  | 409  | Clave única repetida detectada por MongoDB |
+| `INTERNAL_SERVER_ERROR`          | 500  | Error no previsto |
+
+### Cómo probar los casos inválidos
+
+Con el servidor levantado (`npm run dev`), cada comando devuelve el `code` indicado:
+
+```bash
+# Recursos inexistentes y rutas
+curl "http://localhost:8080/api/users/123"                          # 404 USER_NOT_FOUND
+curl "http://localhost:8080/api/orders/64b7f0000000000000000000"    # 404 ORDER_NOT_FOUND
+curl "http://localhost:8080/api/no-existe"                          # 404 ROUTE_NOT_FOUND
+
+# Filtros inválidos
+curl "http://localhost:8080/api/orders?status=volando"              # 400 INVALID_STATUS
+curl "http://localhost:8080/api/orders?priority=ya"                 # 400 INVALID_PRIORITY
+curl "http://localhost:8080/api/users?role=jefe"                    # 400 INVALID_ROLE
+
+# Datos inválidos en el body
+curl -X POST http://localhost:8080/api/users -H "Content-Type: application/json" \
+  -d '{"first_name":"Ana"}'                                         # 400 MISSING_REQUIRED_FIELDS
+curl -X POST http://localhost:8080/api/users -H "Content-Type: application/json" \
+  -d '{"first_name":"Ana","last_name":"Paz","email":"mal","password":"123456"}'   # 400 VALIDATION_ERROR
+curl -X POST http://localhost:8080/api/users -H "Content-Type: application/json" \
+  -d '{"first_name":'                                               # 400 INVALID_JSON
+curl -X POST http://localhost:8080/api/products -H "Content-Type: application/json" \
+  -d '{"title":"Caja","code":"BOX","price":-1,"category":"embalaje"}'             # 400 VALIDATION_ERROR
+```
+
+Para `409 USER_EMAIL_ALREADY_REGISTERED`, registrar dos veces el mismo usuario.
+
+**Módulo de mocks** (cantidad inválida, valores negativos y límites):
+
+```bash
+curl "http://localhost:8080/api/mocks/users?qty=abc"                # 400 MOCK_INVALID_QUANTITY
+curl "http://localhost:8080/api/mocks/users?qty=2.5"                # 400 MOCK_INVALID_QUANTITY
+curl "http://localhost:8080/api/mocks/users?qty=-5"                 # 400 MOCK_NEGATIVE_QUANTITY
+curl "http://localhost:8080/api/mocks/orders?qty=0"                 # 400 MOCK_QUANTITY_OUT_OF_RANGE
+curl "http://localhost:8080/api/mocks/deliveries?qty=1000"          # 400 MOCK_QUANTITY_OUT_OF_RANGE
+curl "http://localhost:8080/api/mocks/users?qty=2&role=jefe"        # 400 INVALID_ROLE
+curl -X POST "http://localhost:8080/api/mocks/seed?users=-1"        # 400 MOCK_NEGATIVE_QUANTITY
+curl -X POST "http://localhost:8080/api/mocks/seed?orders=999"      # 400 MOCK_QUANTITY_OUT_OF_RANGE
+curl -X POST "http://localhost:8080/api/mocks/seed/orders?qty=5"    # 409 MOCK_SEED_REQUIREMENTS_NOT_MET (sin usuarios de prueba cargados)
+```
+
+Ejemplo de respuesta:
+
+```json
+{
+  "status": "error",
+  "code": "MOCK_NEGATIVE_QUANTITY",
+  "message": "\"qty\" no puede ser negativo. Debe ser un entero entre 1 y 100.",
+  "details": { "param": "qty", "received": "-5", "min": 1, "max": 100 }
+}
+```
+
+**Falla durante la carga en MongoDB.** Con el servidor ya levantado, detener MongoDB y pedir una carga:
+
+```bash
+curl -X POST "http://localhost:8080/api/mocks/seed"                 # 500 MOCK_SEED_FAILED (tarda unos segundos)
+```
+
+```json
+{
+  "status": "error",
+  "code": "MOCK_SEED_FAILED",
+  "message": "No se pudieron cargar los datos de prueba en la colección \"users\".",
+  "details": { "collection": "users", "rolledBack": false, "cause": "connect ECONNREFUSED 127.0.0.1:27017" }
+}
+```
+
+El service envuelve cada paso de la carga: si MongoDB falla, no deja pasar el error crudo de Mongoose sino que responde `MOCK_SEED_FAILED` indicando la colección. Además, si la carga falla a mitad de camino (por ejemplo, se insertaron usuarios y pedidos pero fallan las entregas), borra por id lo que esa misma carga había insertado para no dejar datos a medias; `details.rolledBack` indica si pudo hacerlo (es `false` cuando la base está caída). Para que la respuesta no demore, la conexión usa `serverSelectionTimeoutMS` de 5 s.
+
+Con `NODE_ENV=production`, cualquier `POST`/`DELETE` de `/api/mocks/seed` responde `403 MOCK_SEED_FORBIDDEN`.
 
 ## Módulo de mocking — `/api/mocks`
 
@@ -168,7 +334,7 @@ curl -X POST "http://localhost:8080/api/mocks/seed/couriers?qty=3"
 curl -X POST "http://localhost:8080/api/mocks/seed/orders?qty=5"
 ```
 
-Si se piden pedidos sin haber cargado usuarios de prueba, responde `409` con un mensaje que indica qué cargar.
+Si se piden pedidos sin haber cargado usuarios de prueba, responde `409 MOCK_SEED_REQUIREMENTS_NOT_MET` con un mensaje que indica qué cargar.
 
 **Verificar lo insertado** con los endpoints normales de la API:
 
@@ -188,8 +354,9 @@ Todos los usuarios generados tienen la contraseña `coder123`, guardada hasheada
 
 ### Carga controlada
 
-- `qty` (y `users`, `couriers`, `orders`) debe ser un entero entre 1 y `MOCKS.MAX_QTY` (100); si no, responde `400`. `role` se valida contra `USER_ROLES`.
-- Los endpoints de escritura responden **`403` si `NODE_ENV=production`**.
+- `qty` (y `users`, `couriers`, `orders`) debe ser un entero entre 1 y `MOCKS.MAX_QTY` (100); si no, responde `400` con un código distinto según el motivo: `MOCK_INVALID_QUANTITY` (no es un entero), `MOCK_NEGATIVE_QUANTITY` (negativo) o `MOCK_QUANTITY_OUT_OF_RANGE` (0 o más del máximo). `role` se valida contra `USER_ROLES` (`INVALID_ROLE`).
+- Los endpoints de escritura responden **`403 MOCK_SEED_FORBIDDEN` si `NODE_ENV=production`**.
+- Si MongoDB falla durante la carga, responde `500 MOCK_SEED_FAILED` y deshace lo que esa carga haya llegado a insertar. Ver [cómo probar los casos inválidos](#cómo-probar-los-casos-inválidos).
 - Todos los usuarios de prueba usan el dominio `@shipnow.test` (`MOCKS.EMAIL_DOMAIN`). `POST /seed/orders` solo usa usuarios de prueba, y `DELETE /seed` borra solo esos usuarios, sus pedidos y sus entregas.
 - Los emails llevan un sufijo aleatorio para no chocar con el índice único.
 - La inserción usa `insertMany`, que corre las validaciones de los esquemas de Mongoose (enums, `required`, etc.).
@@ -217,6 +384,7 @@ Todos los usuarios generados tienen la contraseña `coder123`, guardada hasheada
 mocks.router.js     → solo path → método del controller
 mock.controller.js  → lee query params, llama al service, elige 200/201
 mock.service.js     → valida qty/rol, bloquea producción, arma las relaciones, decide qué insertar
+                      y lanza los errores del dominio (cantidad inválida, falla de generación o de carga)
 mocks/*.mock.js     → generadores puros con Faker (no conocen Express ni Mongoose)
 *.repository.js     → insertMany / deleteMany / búsqueda de ids
 *.model.js          → esquemas que validan lo que se inserta
@@ -224,7 +392,7 @@ mocks/*.mock.js     → generadores puros con Faker (no conocen Express ni Mongo
 
 ## Endpoints
 
-Todas las respuestas tienen la forma `{ status: 'success', payload }` o `{ status: 'error', message }`.
+Todas las respuestas tienen la forma `{ status: 'success', payload }` o `{ status: 'error', code, message, details }` (ver [Manejo de errores](#manejo-de-errores)).
 
 ### Productos — `/api/products`
 
@@ -308,7 +476,7 @@ ORDER_PRIORITY  = { LOW, NORMAL, HIGH, URGENT }
 DELIVERY_STATUS = { WAITING_COURIER, ASSIGNED, IN_TRANSIT, DELIVERED, CANCELLED }
 DELIVERY_STATUS_BY_ORDER_STATUS  // estado de la entrega según el del pedido
 DELIVERY_STATUSES_WITH_COURIER   // estados que exigen repartidor
-HTTP_STATUS     = { OK, CREATED, NO_CONTENT, BAD_REQUEST, FORBIDDEN, NOT_FOUND, CONFLICT, INTERNAL_SERVER_ERROR }
+HTTP_STATUS     = { OK, CREATED, NO_CONTENT, BAD_REQUEST, FORBIDDEN, NOT_FOUND, CONFLICT, PAYLOAD_TOO_LARGE, INTERNAL_SERVER_ERROR }
 PAGINATION      = { DEFAULT_LIMIT, MAX_LIMIT }
 MOCKS           = { DEFAULT_QTY, MAX_QTY, EMAIL_DOMAIN, PASSWORD, RANDOM_ROLES, DATASET }
 ```
