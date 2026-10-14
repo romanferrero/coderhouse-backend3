@@ -4,12 +4,24 @@ import orderRepository from '../repositories/order.repository.js';
 import deliveryRepository from '../repositories/delivery.repository.js';
 import userService from './user.service.js';
 import { USER_ROLES, MOCKS } from '../constants/index.js';
-import AppError from '../utils/AppError.js';
+import {
+  InvalidRoleError,
+  InvalidMockQuantityError,
+  NegativeMockQuantityError,
+  MockQuantityOutOfRangeError,
+  MockSeedForbiddenError,
+  MockSeedRequirementsError,
+  MockGenerationError,
+  MockSeedFailedError,
+  MockClearFailedError,
+} from '../errors/index.js';
 import { generateUsers, generateCouriers } from '../mocks/user.mock.js';
 import { generateOrders } from '../mocks/order.mock.js';
 import { generateDeliveries } from '../mocks/delivery.mock.js';
 
 const VALID_ROLES = Object.values(USER_ROLES);
+// Un entero escrito como tal: "10" o "-3". No lo son "abc", "2.5" ni "1e2".
+const INTEGER_REGEX = /^[+-]?\d+$/;
 
 // Proporción usada en las respuestas simuladas para que los clientes
 // tengan varios pedidos y los repartidores varias entregas.
@@ -28,28 +40,66 @@ class MockService {
 
   // ---------- Validaciones ----------
 
+  // Cada motivo de rechazo tiene su propio error: no es un entero, es negativo o está fuera de rango.
   parseQty(value, { name = 'qty', fallback = MOCKS.DEFAULT_QTY, min = 1 } = {}) {
     if (value === undefined || value === '') return fallback;
+    const context = { param: name, received: value, min, max: MOCKS.MAX_QTY };
+
+    // Un parámetro repetido (?qty=1&qty=2) llega como array y tampoco es una cantidad válida.
+    const isIntegerText = ['string', 'number'].includes(typeof value) && INTEGER_REGEX.test(String(value).trim());
+    if (!isIntegerText) throw new InvalidMockQuantityError(context);
+
     const qty = Number(value);
-    if (!Number.isInteger(qty) || qty < min || qty > MOCKS.MAX_QTY) {
-      throw AppError.badRequest(`"${name}" debe ser un entero entre ${min} y ${MOCKS.MAX_QTY}.`);
-    }
+    if (qty < 0) throw new NegativeMockQuantityError(context);
+    if (qty < min || qty > MOCKS.MAX_QTY) throw new MockQuantityOutOfRangeError(context);
     return qty;
   }
 
   parseRole(role) {
     if (!role) return undefined;
     const normalizedRole = String(role).toUpperCase();
-    if (!VALID_ROLES.includes(normalizedRole)) {
-      throw AppError.badRequest(`Rol inválido. Valores permitidos: ${VALID_ROLES.join(', ')}.`);
-    }
+    if (!VALID_ROLES.includes(normalizedRole)) throw new InvalidRoleError(normalizedRole, VALID_ROLES);
     return normalizedRole;
   }
 
   // La carga en la base solo se permite fuera de producción.
   ensureSeedAllowed() {
-    if (config.isProduction) {
-      throw AppError.forbidden('La carga de datos de prueba está deshabilitada en producción.');
+    if (config.isProduction) throw new MockSeedForbiddenError();
+  }
+
+  // ---------- Fallas controladas ----------
+
+  // Cualquier falla al generar (Faker, hash de la contraseña, relaciones incompletas)
+  // sale como un error del dominio en lugar de un error genérico.
+  async generate(build) {
+    try {
+      return await build();
+    } catch (error) {
+      throw new MockGenerationError(error);
+    }
+  }
+
+  // Ejecuta un paso de la carga contra MongoDB. Si falla, deshace lo que esta carga haya
+  // llegado a insertar (`created`) y lanza un error controlado en lugar del de Mongoose.
+  async runSeedStep(collection, operation, created = {}) {
+    try {
+      return await operation();
+    } catch (error) {
+      const rolledBack = await this.rollback(created);
+      throw new MockSeedFailedError({ collection, rolledBack, cause: error });
+    }
+  }
+
+  // Borra por id solo los documentos de esta carga: nunca toca lo que ya estaba en la base.
+  async rollback({ userIds = [], orderIds = [] }) {
+    if (userIds.length === 0 && orderIds.length === 0) return true;
+    try {
+      await this.deliveryRepository.deleteByOrdersOrCouriers({ orderIds });
+      await this.orderRepository.deleteByIds(orderIds);
+      await this.userRepository.deleteByIds(userIds);
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -57,21 +107,31 @@ class MockService {
 
   // Todos los usuarios simulados comparten la contraseña MOCKS.PASSWORD, ya hasheada.
   async buildUsers(qty, role) {
-    const passwordHash = await this.hashPassword(MOCKS.PASSWORD);
-    return generateUsers(qty, { role, passwordHash });
+    return this.generate(async () => {
+      const passwordHash = await this.hashPassword(MOCKS.PASSWORD);
+      return generateUsers(qty, { role, passwordHash });
+    });
   }
 
   async buildCouriers(qty) {
-    const passwordHash = await this.hashPassword(MOCKS.PASSWORD);
-    return generateCouriers(qty, { passwordHash });
+    return this.generate(async () => {
+      const passwordHash = await this.hashPassword(MOCKS.PASSWORD);
+      return generateCouriers(qty, { passwordHash });
+    });
+  }
+
+  async buildOrders(qty, { customerIds }) {
+    return this.generate(() => generateOrders(qty, { customerIds }));
   }
 
   // Cada pedido pertenece a un cliente existente en `customerIds` y tiene
   // exactamente una entrega, asignada a un repartidor de `courierIds` si corresponde.
-  buildOrdersWithDeliveries(qty, { customerIds, courierIds }) {
-    const orders = generateOrders(qty, { customerIds });
-    const deliveries = generateDeliveries(orders, { courierIds });
-    return { orders, deliveries };
+  async buildOrdersWithDeliveries(qty, { customerIds, courierIds }) {
+    return this.generate(() => {
+      const orders = generateOrders(qty, { customerIds });
+      const deliveries = generateDeliveries(orders, { courierIds });
+      return { orders, deliveries };
+    });
   }
 
   // ---------- Endpoints que solo devuelven datos simulados ----------
@@ -88,7 +148,7 @@ class MockService {
   async getMockOrders({ qty } = {}) {
     const orderQty = this.parseQty(qty);
     const customers = await this.buildUsers(Math.ceil(orderQty / ORDERS_PER_CUSTOMER), USER_ROLES.USER);
-    const orders = generateOrders(orderQty, { customerIds: toCollectionIds(customers) });
+    const orders = await this.buildOrders(orderQty, { customerIds: toCollectionIds(customers) });
     return { customers, orders };
   }
 
@@ -96,7 +156,7 @@ class MockService {
     const deliveryQty = this.parseQty(qty);
     const customers = await this.buildUsers(Math.ceil(deliveryQty / ORDERS_PER_CUSTOMER), USER_ROLES.USER);
     const couriers = await this.buildCouriers(Math.ceil(deliveryQty / DELIVERIES_PER_COURIER));
-    const { orders, deliveries } = this.buildOrdersWithDeliveries(deliveryQty, {
+    const { orders, deliveries } = await this.buildOrdersWithDeliveries(deliveryQty, {
       customerIds: toCollectionIds(customers),
       courierIds: toCollectionIds(couriers),
     });
@@ -108,14 +168,18 @@ class MockService {
   async seedUsers({ qty, role } = {}) {
     this.ensureSeedAllowed();
     const users = await this.buildUsers(this.parseQty(qty), this.parseRole(role));
-    const inserted = await this.userRepository.createMany(users);
+    const inserted = await this.runSeedStep('users', () => this.userRepository.createMany(users), {
+      userIds: toCollectionIds(users),
+    });
     return { insertados: inserted, coleccion: 'users' };
   }
 
   async seedCouriers({ qty } = {}) {
     this.ensureSeedAllowed();
     const couriers = await this.buildCouriers(this.parseQty(qty));
-    const inserted = await this.userRepository.createMany(couriers);
+    const inserted = await this.runSeedStep('users', () => this.userRepository.createMany(couriers), {
+      userIds: toCollectionIds(couriers),
+    });
     return { insertados: inserted, coleccion: 'users', rol: USER_ROLES.COURIER };
   }
 
@@ -125,20 +189,29 @@ class MockService {
     this.ensureSeedAllowed();
     const orderQty = this.parseQty(qty);
 
-    const [customerIds, courierIds] = await Promise.all([
-      this.userRepository.findIdsByEmailDomain(MOCKS.EMAIL_DOMAIN, { role: USER_ROLES.USER }),
-      this.userRepository.findIdsByEmailDomain(MOCKS.EMAIL_DOMAIN, { role: USER_ROLES.COURIER }),
-    ]);
+    const [customerIds, courierIds] = await this.runSeedStep('users', () =>
+      Promise.all([
+        this.userRepository.findIdsByEmailDomain(MOCKS.EMAIL_DOMAIN, { role: USER_ROLES.USER }),
+        this.userRepository.findIdsByEmailDomain(MOCKS.EMAIL_DOMAIN, { role: USER_ROLES.COURIER }),
+      ])
+    );
     if (customerIds.length === 0 || courierIds.length === 0) {
-      throw AppError.conflict(
+      throw new MockSeedRequirementsError(
         'Se necesitan clientes (USER) y repartidores (COURIER) de prueba en la base. ' +
-          'Cargalos antes con POST /api/mocks/seed/users y POST /api/mocks/seed/couriers.'
+          'Cargalos antes con POST /api/mocks/seed/users y POST /api/mocks/seed/couriers.',
+        { customers: customerIds.length, couriers: courierIds.length }
       );
     }
 
-    const { orders, deliveries } = this.buildOrdersWithDeliveries(orderQty, { customerIds, courierIds });
-    const insertedOrders = await this.orderRepository.createMany(orders);
-    const insertedDeliveries = await this.deliveryRepository.createMany(deliveries);
+    const { orders, deliveries } = await this.buildOrdersWithDeliveries(orderQty, { customerIds, courierIds });
+    // Los usuarios ya estaban en la base: si algo falla solo se deshacen los pedidos de esta carga.
+    const created = { orderIds: toCollectionIds(orders) };
+    const insertedOrders = await this.runSeedStep('orders', () => this.orderRepository.createMany(orders), created);
+    const insertedDeliveries = await this.runSeedStep(
+      'deliveries',
+      () => this.deliveryRepository.createMany(deliveries),
+      created
+    );
     return { insertados: insertedOrders, coleccion: 'orders', entregas: insertedDeliveries };
   }
 
@@ -152,16 +225,33 @@ class MockService {
 
     const customers = await this.buildUsers(usersQty, USER_ROLES.USER);
     const courierDocs = await this.buildCouriers(couriersQty);
-    const { orders: orderDocs, deliveries } = this.buildOrdersWithDeliveries(ordersQty, {
+    const { orders: orderDocs, deliveries } = await this.buildOrdersWithDeliveries(ordersQty, {
       customerIds: toCollectionIds(customers),
       courierIds: toCollectionIds(courierDocs),
     });
 
     // Se insertan en orden de dependencia: primero los referenciados.
-    const insertedUsers = await this.userRepository.createMany(customers);
-    const insertedCouriers = await this.userRepository.createMany(courierDocs);
-    const insertedOrders = await this.orderRepository.createMany(orderDocs);
-    const insertedDeliveries = await this.deliveryRepository.createMany(deliveries);
+    // Si un paso falla, se deshace todo lo insertado por esta carga para no dejarla a medias.
+    const created = {
+      userIds: toCollectionIds([...customers, ...courierDocs]),
+      orderIds: toCollectionIds(orderDocs),
+    };
+    const insertedUsers = await this.runSeedStep('users', () => this.userRepository.createMany(customers), created);
+    const insertedCouriers = await this.runSeedStep(
+      'users',
+      () => this.userRepository.createMany(courierDocs),
+      created
+    );
+    const insertedOrders = await this.runSeedStep(
+      'orders',
+      () => this.orderRepository.createMany(orderDocs),
+      created
+    );
+    const insertedDeliveries = await this.runSeedStep(
+      'deliveries',
+      () => this.deliveryRepository.createMany(deliveries),
+      created
+    );
 
     return {
       insertados: {
@@ -177,13 +267,17 @@ class MockService {
   // sus pedidos y las entregas de esos pedidos o de esos repartidores.
   async clearMockData() {
     this.ensureSeedAllowed();
-    const userIds = await this.userRepository.findIdsByEmailDomain(MOCKS.EMAIL_DOMAIN);
-    const orderIds = await this.orderRepository.findIdsByCustomers(userIds);
+    try {
+      const userIds = await this.userRepository.findIdsByEmailDomain(MOCKS.EMAIL_DOMAIN);
+      const orderIds = await this.orderRepository.findIdsByCustomers(userIds);
 
-    const deliveries = await this.deliveryRepository.deleteByOrdersOrCouriers({ orderIds, courierIds: userIds });
-    const orders = await this.orderRepository.deleteByIds(orderIds);
-    const users = await this.userRepository.deleteByIds(userIds);
-    return { eliminados: { users, orders, deliveries } };
+      const deliveries = await this.deliveryRepository.deleteByOrdersOrCouriers({ orderIds, courierIds: userIds });
+      const orders = await this.orderRepository.deleteByIds(orderIds);
+      const users = await this.userRepository.deleteByIds(userIds);
+      return { eliminados: { users, orders, deliveries } };
+    } catch (error) {
+      throw new MockClearFailedError(error);
+    }
   }
 }
 
