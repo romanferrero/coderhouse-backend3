@@ -4,6 +4,7 @@ import logger from '../logger/index.js';
 import { USER_ROLES, PASSWORD_SALT_ROUNDS } from '../constants/index.js';
 import {
   InvalidDataError,
+  InvalidFieldTypeError,
   InvalidRoleError,
   MissingFieldsError,
   BlankFieldsError,
@@ -13,12 +14,13 @@ import {
   LastAdminError,
 } from '../errors/index.js';
 import { pick } from '../utils/pick.js';
-import { findBlankFields, findBlankProvidedFields } from '../utils/validation.js';
+import { findBlankFields, findBlankProvidedFields, findNonStringFields } from '../utils/validation.js';
 import { normalizePagination, buildPaginatedResult } from '../utils/pagination.js';
 
 const CREATE_FIELDS = ['first_name', 'last_name', 'email', 'age', 'password'];
 const UPDATE_FIELDS = CREATE_FIELDS;
 const REQUIRED_FIELDS = ['first_name', 'last_name', 'email', 'password'];
+const TEXT_FIELDS = ['first_name', 'last_name', 'email', 'password'];
 const VALID_ROLES = Object.values(USER_ROLES);
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 6;
@@ -26,6 +28,13 @@ const MIN_PASSWORD_LENGTH = 6;
 class UserService {
   constructor(repository) {
     this.repository = repository;
+  }
+
+  // Los campos de texto tienen que llegar como string: un array u objeto no es un valor válido
+  // y, sin este control, terminaría en un 500 o llegaría tal cual a las consultas de MongoDB.
+  validateTextFields(data) {
+    const invalid = findNonStringFields(data, TEXT_FIELDS);
+    if (invalid.length > 0) throw new InvalidFieldTypeError(invalid);
   }
 
   validateFields({ email, password, age }) {
@@ -88,6 +97,7 @@ class UserService {
     if (missing.length > 0) {
       throw new MissingFieldsError(missing);
     }
+    this.validateTextFields(data);
     this.validateFields(data);
 
     if (await this.repository.existsByEmail(data.email)) {
@@ -111,6 +121,7 @@ class UserService {
     if (blank.length > 0) {
       throw new BlankFieldsError(blank);
     }
+    this.validateTextFields(data);
     this.validateFields(data);
 
     await this.getUserById(id);

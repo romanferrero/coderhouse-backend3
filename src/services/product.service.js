@@ -3,6 +3,7 @@ import logger from '../logger/index.js';
 import { PRODUCT_STATUS } from '../constants/index.js';
 import {
   InvalidDataError,
+  InvalidFieldTypeError,
   InvalidStatusError,
   MissingFieldsError,
   BlankFieldsError,
@@ -11,12 +12,13 @@ import {
   ProductCodeAlreadyExistsError,
 } from '../errors/index.js';
 import { pick } from '../utils/pick.js';
-import { findBlankFields, findBlankProvidedFields } from '../utils/validation.js';
+import { findBlankFields, findBlankProvidedFields, findNonStringFields } from '../utils/validation.js';
 import { normalizePagination, buildPaginatedResult } from '../utils/pagination.js';
 
 const CREATE_FIELDS = ['title', 'description', 'code', 'price', 'stock', 'category'];
 const UPDATE_FIELDS = CREATE_FIELDS;
 const REQUIRED_FIELDS = ['title', 'code', 'price', 'category'];
+const TEXT_FIELDS = ['title', 'description', 'code', 'category'];
 const LISTABLE_STATUSES = [PRODUCT_STATUS.AVAILABLE, PRODUCT_STATUS.OUT_OF_STOCK];
 
 class ProductService {
@@ -27,6 +29,13 @@ class ProductService {
   // Regla de negocio: el estado de un producto se deriva de su stock.
   resolveStatus(stock) {
     return stock > 0 ? PRODUCT_STATUS.AVAILABLE : PRODUCT_STATUS.OUT_OF_STOCK;
+  }
+
+  // Los campos de texto tienen que llegar como string: un array u objeto no es un valor válido
+  // y, sin este control, terminaría en un 500 o llegaría tal cual a las consultas de MongoDB.
+  validateTextFields(data) {
+    const invalid = findNonStringFields(data, TEXT_FIELDS);
+    if (invalid.length > 0) throw new InvalidFieldTypeError(invalid);
   }
 
   validateNumbers({ price, stock }) {
@@ -67,6 +76,7 @@ class ProductService {
     if (missing.length > 0) {
       throw new MissingFieldsError(missing);
     }
+    this.validateTextFields(data);
     this.validateNumbers(data);
 
     if (await this.repository.existsByCode(data.code)) {
@@ -90,6 +100,7 @@ class ProductService {
     if (blank.length > 0) {
       throw new BlankFieldsError(blank);
     }
+    this.validateTextFields(data);
     this.validateNumbers(data);
 
     await this.getProductById(id);

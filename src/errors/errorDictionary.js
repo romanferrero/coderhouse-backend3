@@ -17,6 +17,7 @@ export const ERROR_DICTIONARY = Object.freeze({
     HTTP_STATUS.BAD_REQUEST,
     'Hay campos obligatorios que no pueden quedar vacíos.'
   ),
+  INVALID_FIELD_TYPE: define('INVALID_FIELD_TYPE', HTTP_STATUS.BAD_REQUEST, 'Hay campos con un tipo de dato inválido.'),
   NO_FIELDS_TO_UPDATE: define(
     'NO_FIELDS_TO_UPDATE',
     HTTP_STATUS.BAD_REQUEST,

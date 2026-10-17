@@ -5,6 +5,10 @@ export const isBlank = (value) =>
 // Devuelve los campos de `fields` que están vacíos en `data`.
 export const findBlankFields = (data, fields) => fields.filter((field) => isBlank(data[field]));
 
+// Devuelve los campos de `fields` que vinieron en `data` pero no son un string (array, objeto, número…).
+export const findNonStringFields = (data, fields) =>
+  fields.filter((field) => field in data && data[field] !== null && typeof data[field] !== 'string');
+
 // Para updates: solo revisa los campos obligatorios que efectivamente se enviaron.
 export const findBlankProvidedFields = (data, fields) =>
   fields.filter((field) => field in data && isBlank(data[field]));

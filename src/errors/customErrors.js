@@ -33,6 +33,16 @@ export class BlankFieldsError extends AppError {
   }
 }
 
+// Un campo de texto llegó como array, objeto o número (ej. { "email": ["ana@mail.com"] }).
+export class InvalidFieldTypeError extends AppError {
+  constructor(fields) {
+    super(ERRORS.INVALID_FIELD_TYPE, {
+      message: `Estos campos deben ser texto: ${list(fields)}.`,
+      details: { fields, expected: 'string' },
+    });
+  }
+}
+
 export class NoFieldsToUpdateError extends AppError {
   constructor(allowed) {
     super(ERRORS.NO_FIELDS_TO_UPDATE, {
