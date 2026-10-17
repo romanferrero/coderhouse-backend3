@@ -1,11 +1,12 @@
 # ShipNow API
 
-API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y repartidores), **pedidos** y **entregas**, con arquitectura por capas (**Router → Controller → Service → Repository → Model**), configuración de entorno centralizada, un **módulo de mocking** para generar y cargar datos de prueba y una **capa centralizada de manejo de errores**.
+API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y repartidores), **pedidos** y **entregas**, con arquitectura por capas (**Router → Controller → Service → Repository → Model**), configuración de entorno centralizada, un **módulo de mocking** para generar y cargar datos de prueba, una **capa centralizada de manejo de errores** y **logging con Winston**.
 
-> Pre-entregas Módulo 1 (arquitectura por capas), Módulo 2 (mocking y carga de datos) y Módulo 3 (manejo profesional de errores) — Backend III (Coderhouse).
+> Pre-entregas Módulo 1 (arquitectura por capas), Módulo 2 (mocking y carga de datos), Módulo 3 (manejo profesional de errores) y Módulo 4 (logging y monitoreo básico) — Backend III (Coderhouse).
 
 - [Cómo correrlo localmente](#cómo-correrlo-localmente)
 - [Manejo de errores](#manejo-de-errores)
+- [Logging](#logging)
 - [Módulo de mocking — `/api/mocks`](#módulo-de-mocking--apimocks)
 - [Endpoints](#endpoints)
 - [Constantes](#constantes)
@@ -18,6 +19,7 @@ API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y 
 - dotenv
 - bcryptjs (hash de contraseñas)
 - @faker-js/faker (datos simulados, locale español)
+- winston + winston-daily-rotate-file (logging con rotación de archivos)
 
 ## Cómo correrlo localmente
 
@@ -52,10 +54,10 @@ API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y 
 
 ### Si falta una variable
 
-La app **no arranca** si falta o es inválida alguna variable crítica. Por ejemplo, con `MONGODB_URI` vacía:
+La app **no arranca** si falta o es inválida alguna variable crítica, y lo registra como `fatal` (consola y `logs/error.log`). Por ejemplo, con `MONGODB_URI` vacía:
 
 ```
-Error: [config] Faltan variables de entorno obligatorias: MONGODB_URI. Revisá tu archivo .env (podés tomar .env.example como referencia).
+2026-10-14 18:25:30 [fatal]   No se pudo iniciar la aplicación: [config] Faltan variables de entorno obligatorias: MONGODB_URI. Revisá tu archivo .env (podés tomar .env.example como referencia).
 ```
 
 ## Estructura del proyecto
@@ -74,11 +76,13 @@ src/
 ├── mocks/                 # generadores de datos simulados (funciones puras con Faker)
 ├── routes/                # path → método del Controller, nada más
 ├── errors/                # diccionario de errores, AppError y errores personalizados del dominio
-├── middlewares/           # errorHandler: único lugar que arma respuestas de error
+├── middlewares/           # errorHandler (único lugar que arma respuestas de error) y requestLogger
+├── logger/                # configuración única de Winston (niveles, formato, transports, rotación)
 ├── db/                    # conexión a MongoDB
 ├── utils/                 # paginación, helpers
 ├── app.js                 # instancia de Express
 └── server.js              # punto de entrada: conecta la DB y levanta el servidor
+logs/                      # archivos de log generados (ignorados por Git, salvo .gitkeep)
 ```
 
 ### Flujo de una request
@@ -152,7 +156,7 @@ Cómo se reparte el trabajo entre capas:
    | Ruta inexistente (`notFoundHandler` la deriva) | `ROUTE_NOT_FOUND` (404)      |
    | Cualquier otra cosa                            | `INTERNAL_SERVER_ERROR` (500) |
 
-Los errores `5xx` se loguean en consola. La causa técnica (por ejemplo, el mensaje del driver de MongoDB) se agrega en `details.cause` solo fuera de producción; con `NODE_ENV=production` nunca se expone.
+Cada error que pasa por el middleware queda registrado con el logger: los `4xx` como `warning` y los `5xx` como `error`, con el stack de la causa original (ver [Logging](#logging)). La causa técnica (por ejemplo, el mensaje del driver de MongoDB) se agrega en `details.cause` solo fuera de producción; con `NODE_ENV=production` nunca se expone.
 
 ### Diccionario de errores
 
@@ -258,6 +262,144 @@ curl -X POST "http://localhost:8080/api/mocks/seed"                 # 500 MOCK_S
 El service envuelve cada paso de la carga: si MongoDB falla, no deja pasar el error crudo de Mongoose sino que responde `MOCK_SEED_FAILED` indicando la colección. Además, si la carga falla a mitad de camino (por ejemplo, se insertaron usuarios y pedidos pero fallan las entregas), borra por id lo que esa misma carga había insertado para no dejar datos a medias; `details.rolledBack` indica si pudo hacerlo (es `false` cuando la base está caída). Para que la respuesta no demore, la conexión usa `serverSelectionTimeoutMS` de 5 s.
 
 Con `NODE_ENV=production`, cualquier `POST`/`DELETE` de `/api/mocks/seed` responde `403 MOCK_SEED_FORBIDDEN`.
+
+## Logging
+
+ShipNow usa **[Winston](https://github.com/winstonjs/winston)** como logger centralizado, con **winston-daily-rotate-file** para la rotación. No quedan `console.log` en el código: todo pasa por el logger.
+
+### Configuración centralizada
+
+La configuración vive en un solo módulo, `src/logger/logger.js` (niveles, colores, formato, transports y rotación). El resto del proyecto solo lo importa:
+
+```js
+import logger from '../logger/index.js';
+
+logger.info(`Producto creado: ${product._id}`);
+logger.warning('Se perdió la conexión con MongoDB');
+```
+
+Formato de cada línea (igual en consola y en archivos; en desarrollo la consola va con colores):
+
+```
+2026-10-14 18:25:10 [info]    Conexión a MongoDB establecida (localhost:27017/shipnow)
+2026-10-14 18:25:10 [info]    Servidor ShipNow escuchando en el puerto 8080 (development)
+2026-10-14 18:25:11 [warning] GET /api/orders/64b7f0000000000000000000 → 404 ORDER_NOT_FOUND: Pedido con id "64b7f0000000000000000000" no encontrado. {"details":{"id":"64b7f0000000000000000000"}}
+2026-10-14 18:25:59 [error]   GET /api/orders → 500 INTERNAL_SERVER_ERROR: Error interno del servidor.
+TypeError: Cannot read properties of undefined (reading "x")
+    at ...
+```
+
+Los datos extra del log (por ejemplo, los `details` del error) se agregan en JSON al final de la línea, y en los errores `5xx` el stack va en las líneas siguientes.
+
+### Niveles
+
+| Nivel     | Prioridad | Para qué se usa en ShipNow |
+| --------- | --------- | -------------------------- |
+| `fatal`   | 0         | La app no puede arrancar: configuración inválida o falla en la conexión inicial a MongoDB |
+| `error`   | 1         | Errores inesperados del servidor (`5xx`), falla al deshacer una carga de mocks, errores de la conexión a MongoDB |
+| `warning` | 2         | Errores esperados o de negocio (`4xx`): datos inválidos, cantidad inválida en mocks, pedido no encontrado, ruta inexistente; MongoDB desconectado; carga de mocks deshecha |
+| `info`    | 3         | Eventos normales importantes: servidor iniciado, conexión a MongoDB, usuario registrado o eliminado, cambio de rol, producto creado o dado de baja, carga y limpieza de datos de prueba (pedidos creados) |
+| `http`    | 4         | Una línea por request: método, ruta, status y duración (`requestLogger`) |
+| `debug`   | 5         | Información de desarrollo: generación de datos simulados en `GET /api/mocks/*` |
+
+Cada transport registra su nivel **y todos los más graves**. Por ejemplo, un transport en `info` registra `info`, `warning`, `error` y `fatal`.
+
+### Comportamiento según el entorno
+
+El nivel mínimo sale de `NODE_ENV` (la misma variable de entorno del Módulo 1):
+
+| `NODE_ENV`    | Nivel mínimo | Qué se ve |
+| ------------- | ------------ | --------- |
+| `development` | `debug`      | Todo, con colores en consola |
+| `production`  | `info`       | `info`, `warning`, `error` y `fatal`, sin colores |
+| `test`        | `warning`    | Solo advertencias y errores, para no ensuciar la salida de los tests |
+
+Además, en producción la respuesta de error nunca incluye `details.cause`: el detalle técnico queda solo en los logs.
+
+### Archivos y rotación
+
+| Archivo                   | Qué guarda | Rotación |
+| ------------------------- | ---------- | -------- |
+| `logs/error.log`          | Solo `error` y `fatal` | Por tamaño: al llegar a 5 MB pasa a `error1.log`, `error2.log`… y se conservan 5 archivos (el más reciente siempre es `error.log`) |
+| `logs/app-AAAA-MM-DD.log` | Todos los logs desde el nivel mínimo del entorno | Por fecha: un archivo por día (o cada 20 MB); los anteriores se comprimen (`.gz`) y se borran a los **14 días** |
+| `logs/.app-audit.json`    | Registro interno de winston-daily-rotate-file para saber qué archivos borrar | — |
+
+La carpeta `logs/` se resuelve desde la raíz del proyecto (no depende del directorio desde el que se ejecute `node`) y se crea sola si no existe.
+
+### Qué se ignora en Git
+
+```gitignore
+*.log
+logs/*
+!logs/.gitkeep
+```
+
+La carpeta `logs/` queda en el repositorio solo con un `.gitkeep` vacío. Los archivos que genera la app (`error.log`, `app-*.log`, los `.gz` rotados y el audit) no se suben.
+
+### Endpoint de prueba — `GET /api/loggerTest`
+
+Es una herramienta interna para validar la configuración, no una funcionalidad del negocio. Genera un log de cada nivel (`debug`, `http`, `info`, `warning`, `error`, `fatal`) con el prefijo `[loggerTest]` y responde qué niveles se registraron según el entorno:
+
+```bash
+curl "http://localhost:8080/api/loggerTest"
+```
+
+```json
+{
+  "status": "success",
+  "payload": {
+    "nivelMinimo": "debug",
+    "registrados": ["debug", "http", "info", "warning", "error", "fatal"],
+    "omitidos": [],
+    "enErrorLog": ["error", "fatal"]
+  }
+}
+```
+
+**Cómo validar que funciona:**
+
+1. **Consola**: con `NODE_ENV=development` aparecen las 6 líneas, cada nivel con su color:
+
+   ```
+   2026-10-14 18:25:11 [debug]   [loggerTest] Detalle de depuración: filtro de pedidos { status: "PENDING", page: 1 }
+   2026-10-14 18:25:11 [http]    [loggerTest] GET /api/orders/A-102 200 - 8.4 ms
+   2026-10-14 18:25:11 [info]    [loggerTest] Pedido #A-102 creado correctamente
+   2026-10-14 18:25:11 [warning] [loggerTest] Pedido #A-102 sin repartidor asignado
+   2026-10-14 18:25:11 [error]   [loggerTest] Falló la creación del pedido: ValidationError (campo "destino" requerido)
+   2026-10-14 18:25:11 [fatal]   [loggerTest] Se perdió la conexión con MongoDB y no se pudo restablecer
+   2026-10-14 18:25:11 [http]    GET /api/loggerTest 200 - 8.2 ms
+   ```
+
+2. **`logs/error.log`**: solo tiene las líneas `[error]` y `[fatal]`, nunca `info` ni `debug`.
+3. **`logs/app-AAAA-MM-DD.log`** (fecha del día): tiene todas las líneas que salieron por consola.
+4. **Producción**: con `NODE_ENV=production`, el endpoint responde `"nivelMinimo": "info"` y `"omitidos": ["debug", "http"]`, y esas dos líneas no aparecen ni en consola ni en archivos.
+
+Otros eventos para ver en los logs:
+
+```bash
+curl "http://localhost:8080/api/mocks/users?qty=abc"           # warning: MOCK_INVALID_QUANTITY con el valor recibido
+curl "http://localhost:8080/api/no-existe"                     # warning: ROUTE_NOT_FOUND
+curl -X POST "http://localhost:8080/api/mocks/seed?orders=5"   # info: carga completa (pedidos creados)
+```
+
+Para ver un `fatal` real, arrancar con MongoDB apagado o con una variable de entorno inválida (ver [Si falta una variable](#si-falta-una-variable)):
+
+```
+2026-10-14 18:25:54 [fatal]   No se pudo iniciar la aplicación: Error al conectar con MongoDB: connect ECONNREFUSED 127.0.0.1:27017
+```
+
+### Cómo se reparte por capas
+
+```
+logger/logger.js                 → configuración única (niveles, formato, transports, rotación)
+middlewares/requestLogger.js     → nivel http: una línea por request
+middlewares/errorHandler.js      → warning para 4xx, error (con stack) para 5xx; la respuesta al cliente no cambia
+server.js / db/connection.js     → arranque, conexión a MongoDB y sus cambios de estado; fatal si no puede iniciar
+services/*.service.js            → eventos del negocio (info) y de los mocks (debug / info)
+controllers/logger.controller.js → endpoint de prueba
+```
+
+El logger complementa al manejo de errores, no lo reemplaza: el `errorHandler` sigue siendo el único que arma la respuesta, y además deja registro de cada error.
 
 ## Módulo de mocking — `/api/mocks`
 
@@ -430,6 +572,13 @@ Roles válidos: `ADMIN`, `USER` (cliente) y `COURIER` (repartidor).
 | ------ | ------- | ---------------------------------------------------------------------------------- |
 | GET    | `/`     | Lista entregas con pedido y repartidor populados. Query: `page`, `limit`, `status` |
 | GET    | `/:did` | Obtiene una entrega                                                                |
+
+### Herramientas internas
+
+| Método | Ruta              | Descripción |
+| ------ | ----------------- | ----------- |
+| GET    | `/api/health`     | Verifica que el servidor responde |
+| GET    | `/api/loggerTest` | Genera un log de cada nivel (ver [Endpoint de prueba](#endpoint-de-prueba--get-apiloggertest)) |
 
 Ejemplo:
 
