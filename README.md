@@ -97,6 +97,7 @@ HTTP → Router → Controller → Service → Repository → Model (Mongoose) �
 - Los **Controllers** nunca importan Mongoose: solo conocen al Service.
 - Los **Services** detectan los casos inválidos y lanzan un error personalizado del dominio; el middleware `errorHandler` es el único que lo convierte en respuesta (ver [Manejo de errores](#manejo-de-errores)).
 - Los Services rechazan con `400` los campos obligatorios vacíos o con solo espacios, tanto al crear como al actualizar (PUT).
+- Los campos de texto tienen que llegar como string: un array u objeto (`{"email": ["ana@mail.com"]}`, `{"code": {"$ne": null}}`) responde `400 INVALID_FIELD_TYPE` antes de validar el formato o de consultar MongoDB.
 - `process.env` solo se lee en `src/config/env.config.js`.
 
 ## Manejo de errores
@@ -165,6 +166,7 @@ Cada error que pasa por el middleware queda registrado con el logger: los `4xx` 
 | `VALIDATION_ERROR`               | 400  | Un campo tiene formato o valor inválido (email, precio, stock, edad…) |
 | `MISSING_REQUIRED_FIELDS`        | 400  | Faltan campos obligatorios al crear |
 | `BLANK_REQUIRED_FIELDS`          | 400  | Se intenta dejar vacío un campo obligatorio al actualizar |
+| `INVALID_FIELD_TYPE`             | 400  | Un campo de texto (`email`, `password`, `code`, `title`…) llega como array, objeto o número |
 | `NO_FIELDS_TO_UPDATE`            | 400  | Un `PUT` sin ningún campo editable |
 | `INVALID_ROLE`                   | 400  | Rol fuera de `USER_ROLES` |
 | `INVALID_STATUS`                 | 400  | Estado inválido de producto, pedido o entrega |
@@ -213,6 +215,8 @@ curl -X POST http://localhost:8080/api/users -H "Content-Type: application/json"
   -d '{"first_name":"Ana","last_name":"Paz","email":"mal","password":"123456"}'   # 400 VALIDATION_ERROR
 curl -X POST http://localhost:8080/api/users -H "Content-Type: application/json" \
   -d '{"first_name":'                                               # 400 INVALID_JSON
+curl -X POST http://localhost:8080/api/users -H "Content-Type: application/json"   -d '{"first_name":"Ana","last_name":"Paz","email":["ana@mail.com"],"password":"123456"}'   # 400 INVALID_FIELD_TYPE
+curl -X POST http://localhost:8080/api/products -H "Content-Type: application/json"   -d '{"title":"Caja","code":{"$ne":null},"price":10,"category":"embalaje"}'      # 400 INVALID_FIELD_TYPE
 curl -X POST http://localhost:8080/api/products -H "Content-Type: application/json" \
   -d '{"title":"Caja","code":"BOX","price":-1,"category":"embalaje"}'             # 400 VALIDATION_ERROR
 ```
