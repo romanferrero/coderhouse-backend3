@@ -1,4 +1,5 @@
 import config from '../config/index.js';
+import logger from '../logger/index.js';
 import userRepository from '../repositories/user.repository.js';
 import orderRepository from '../repositories/order.repository.js';
 import deliveryRepository from '../repositories/delivery.repository.js';
@@ -97,8 +98,15 @@ class MockService {
       await this.deliveryRepository.deleteByOrdersOrCouriers({ orderIds });
       await this.orderRepository.deleteByIds(orderIds);
       await this.userRepository.deleteByIds(userIds);
+      logger.warning('Carga de datos de prueba fallida: se deshizo lo insertado', {
+        users: userIds.length,
+        orders: orderIds.length,
+      });
       return true;
-    } catch {
+    } catch (error) {
+      logger.error('No se pudo deshacer la carga parcial de datos de prueba: pueden quedar datos a medias', {
+        stack: error.stack,
+      });
       return false;
     }
   }
@@ -137,11 +145,15 @@ class MockService {
   // ---------- Endpoints que solo devuelven datos simulados ----------
 
   async getMockUsers({ qty, role } = {}) {
-    return this.buildUsers(this.parseQty(qty), this.parseRole(role));
+    const users = await this.buildUsers(this.parseQty(qty), this.parseRole(role));
+    logger.debug(`Mocks: generados ${users.length} usuarios simulados${role ? ` (${role})` : ''}`);
+    return users;
   }
 
   async getMockCouriers({ qty } = {}) {
-    return this.buildCouriers(this.parseQty(qty));
+    const couriers = await this.buildCouriers(this.parseQty(qty));
+    logger.debug(`Mocks: generados ${couriers.length} repartidores simulados`);
+    return couriers;
   }
 
   // Devuelve también los clientes para que las referencias de los pedidos se puedan seguir.
@@ -149,6 +161,7 @@ class MockService {
     const orderQty = this.parseQty(qty);
     const customers = await this.buildUsers(Math.ceil(orderQty / ORDERS_PER_CUSTOMER), USER_ROLES.USER);
     const orders = await this.buildOrders(orderQty, { customerIds: toCollectionIds(customers) });
+    logger.debug(`Mocks: generados ${orders.length} pedidos simulados para ${customers.length} clientes`);
     return { customers, orders };
   }
 
@@ -160,6 +173,7 @@ class MockService {
       customerIds: toCollectionIds(customers),
       courierIds: toCollectionIds(couriers),
     });
+    logger.debug(`Mocks: generadas ${deliveries.length} entregas simuladas con sus pedidos y usuarios`);
     return { customers, couriers, orders, deliveries };
   }
 
@@ -171,6 +185,7 @@ class MockService {
     const inserted = await this.runSeedStep('users', () => this.userRepository.createMany(users), {
       userIds: toCollectionIds(users),
     });
+    logger.info(`Mocks: cargados ${inserted} usuarios de prueba en MongoDB`);
     return { insertados: inserted, coleccion: 'users' };
   }
 
@@ -180,6 +195,7 @@ class MockService {
     const inserted = await this.runSeedStep('users', () => this.userRepository.createMany(couriers), {
       userIds: toCollectionIds(couriers),
     });
+    logger.info(`Mocks: cargados ${inserted} repartidores de prueba en MongoDB`);
     return { insertados: inserted, coleccion: 'users', rol: USER_ROLES.COURIER };
   }
 
@@ -212,6 +228,7 @@ class MockService {
       () => this.deliveryRepository.createMany(deliveries),
       created
     );
+    logger.info(`Mocks: creados ${insertedOrders} pedidos de prueba con ${insertedDeliveries} entregas`);
     return { insertados: insertedOrders, coleccion: 'orders', entregas: insertedDeliveries };
   }
 
@@ -253,14 +270,14 @@ class MockService {
       created
     );
 
-    return {
-      insertados: {
-        users: insertedUsers,
-        couriers: insertedCouriers,
-        orders: insertedOrders,
-        deliveries: insertedDeliveries,
-      },
+    const inserted = {
+      users: insertedUsers,
+      couriers: insertedCouriers,
+      orders: insertedOrders,
+      deliveries: insertedDeliveries,
     };
+    logger.info('Mocks: carga completa de datos de prueba en MongoDB', inserted);
+    return { insertados: inserted };
   }
 
   // Elimina solo lo generado por el módulo de mocks: usuarios con el dominio de prueba,
@@ -274,6 +291,7 @@ class MockService {
       const deliveries = await this.deliveryRepository.deleteByOrdersOrCouriers({ orderIds, courierIds: userIds });
       const orders = await this.orderRepository.deleteByIds(orderIds);
       const users = await this.userRepository.deleteByIds(userIds);
+      logger.info('Mocks: datos de prueba eliminados de MongoDB', { users, orders, deliveries });
       return { eliminados: { users, orders, deliveries } };
     } catch (error) {
       throw new MockClearFailedError(error);

@@ -1,13 +1,29 @@
 import mongoose from 'mongoose';
 import config from '../config/index.js';
+import logger from '../logger/index.js';
 
 // Si MongoDB no responde, las operaciones fallan a los 5 s en lugar de los 30 s por defecto
 // del driver: el cliente recibe antes el error controlado.
 const SERVER_SELECTION_TIMEOUT_MS = 5000;
 
+// Cambios de estado de la conexión una vez que la app ya está corriendo.
+const watchConnection = () => {
+  mongoose.connection.on('disconnected', () => logger.warning('Se perdió la conexión con MongoDB'));
+  mongoose.connection.on('reconnected', () => logger.info('Conexión con MongoDB restablecida'));
+  mongoose.connection.on('error', (error) => logger.error(`Error en la conexión con MongoDB: ${error.message}`));
+};
+
+// Sin base de datos la API no puede funcionar: si falla la conexión inicial, server.js
+// registra el error como fatal y corta el arranque.
 export const connectDB = async () => {
-  await mongoose.connect(config.mongodbUri, { serverSelectionTimeoutMS: SERVER_SELECTION_TIMEOUT_MS });
-  console.log('[db] Conectado a MongoDB');
+  try {
+    await mongoose.connect(config.mongodbUri, { serverSelectionTimeoutMS: SERVER_SELECTION_TIMEOUT_MS });
+  } catch (error) {
+    throw new Error(`Error al conectar con MongoDB: ${error.message}`, { cause: error });
+  }
+  const { host, port, name } = mongoose.connection;
+  logger.info(`Conexión a MongoDB establecida (${host}:${port}/${name})`);
+  watchConnection();
 };
 
 export const disconnectDB = () => mongoose.disconnect();

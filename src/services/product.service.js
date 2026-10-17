@@ -1,4 +1,5 @@
 import productRepository from '../repositories/product.repository.js';
+import logger from '../logger/index.js';
 import { PRODUCT_STATUS } from '../constants/index.js';
 import {
   InvalidDataError,
@@ -74,7 +75,9 @@ class ProductService {
 
     data.stock = data.stock ?? 0;
     data.status = this.resolveStatus(data.stock);
-    return this.repository.create(data);
+    const product = await this.repository.create(data);
+    logger.info(`Producto creado: ${product._id} (código ${product.code})`);
+    return product;
   }
 
   async updateProduct(id, payload) {
@@ -103,6 +106,7 @@ class ProductService {
   async deleteProduct(id) {
     await this.getProductById(id);
     await this.repository.updateById(id, { status: PRODUCT_STATUS.DISCONTINUED });
+    logger.info(`Producto dado de baja: ${id}`);
   }
 }
 

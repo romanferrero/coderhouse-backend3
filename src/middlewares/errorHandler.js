@@ -1,5 +1,6 @@
 import { HTTP_STATUS } from '../constants/index.js';
 import config from '../config/index.js';
+import logger from '../logger/index.js';
 import { AppError, ERROR_DICTIONARY as ERRORS, RouteNotFoundError } from '../errors/index.js';
 
 // Una ruta inexistente es un error más: se deriva al errorHandler en lugar de responder acá.
@@ -54,13 +55,27 @@ const buildDetails = ({ details, cause }) => {
   return { ...details, cause: cause.message ?? String(cause) };
 };
 
+// Los errores esperados (4xx: datos inválidos, recurso o ruta inexistente) se registran como
+// warning; las fallas del servidor (5xx), como error y con el stack de la causa original.
+const logError = (req, error) => {
+  const summary = `${req.method} ${req.originalUrl} → ${error.statusCode} ${error.code}: ${error.message}`;
+  const meta = error.details ? { details: error.details } : {};
+
+  if (error.statusCode >= HTTP_STATUS.INTERNAL_SERVER_ERROR) {
+    const origin = error.cause ?? error;
+    logger.error(summary, { ...meta, stack: origin.stack ?? String(origin) });
+    return;
+  }
+  logger.warning(summary, meta);
+};
+
 // Único punto de la API que construye respuestas de error. Todas tienen la misma forma:
 // { status: 'error', code, message, details }
 export const errorHandler = (err, req, res, next) => {
   if (res.headersSent) return next(err);
 
   const error = toAppError(err);
-  if (error.statusCode >= HTTP_STATUS.INTERNAL_SERVER_ERROR) console.error(err);
+  logError(req, error);
 
   res.status(error.statusCode).json({
     status: 'error',

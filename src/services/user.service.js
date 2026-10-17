@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import userRepository from '../repositories/user.repository.js';
+import logger from '../logger/index.js';
 import { USER_ROLES, PASSWORD_SALT_ROUNDS } from '../constants/index.js';
 import {
   InvalidDataError,
@@ -95,7 +96,9 @@ class UserService {
 
     data.password = await this.hashPassword(data.password);
     data.role = USER_ROLES.USER;
-    return this.repository.create(data);
+    const user = await this.repository.create(data);
+    logger.info(`Usuario registrado: ${user._id}`);
+    return user;
   }
 
   async updateUser(id, payload) {
@@ -128,13 +131,16 @@ class UserService {
     if (user.role === normalizedRole) return user;
     await this.ensureNotLastAdmin(user);
 
-    return this.repository.updateById(id, { role: normalizedRole });
+    const updated = await this.repository.updateById(id, { role: normalizedRole });
+    logger.info(`Rol del usuario ${id} cambiado de ${user.role} a ${normalizedRole}`);
+    return updated;
   }
 
   async deleteUser(id) {
     const user = await this.getUserById(id);
     await this.ensureNotLastAdmin(user);
     await this.repository.deleteById(id);
+    logger.info(`Usuario eliminado: ${id}`);
   }
 }
 
