@@ -1,1 +1,3 @@
-export { default } from './env.config.js';
+import { loadConfig } from './env.config.js';
+
+export default loadConfig();

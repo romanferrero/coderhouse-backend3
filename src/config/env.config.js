@@ -37,7 +37,11 @@ const validateEnv = (env) => {
   });
 };
 
-// Único lugar del proyecto que lee process.env
-const config = validateEnv(process.env);
+// Único lugar del proyecto que lee process.env.
 
-export default config;
+// Entorno tal como llega, sin validar. Lo usa el logger, que tiene que funcionar aun con
+// una configuración inválida para poder registrar ese error.
+export const rawNodeEnv = process.env.NODE_ENV;
+
+// Valida y devuelve la config; lanza un error si falta o es inválida alguna variable.
+export const loadConfig = () => validateEnv(process.env);

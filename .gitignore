@@ -4,3 +4,7 @@ node_modules/
 !.env.example
 *.log
 .DS_Store
+
+# Logs generados por la aplicación: solo se versiona la carpeta (logs/.gitkeep)
+logs/*
+!logs/.gitkeep
