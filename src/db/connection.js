@@ -6,9 +6,11 @@ import logger from '../logger/index.js';
 // del driver: el cliente recibe antes el error controlado.
 const SERVER_SELECTION_TIMEOUT_MS = 5000;
 
+const onDisconnected = () => logger.warning('Se perdió la conexión con MongoDB');
+
 // Cambios de estado de la conexión una vez que la app ya está corriendo.
 const watchConnection = () => {
-  mongoose.connection.on('disconnected', () => logger.warning('Se perdió la conexión con MongoDB'));
+  mongoose.connection.on('disconnected', onDisconnected);
   mongoose.connection.on('reconnected', () => logger.info('Conexión con MongoDB restablecida'));
   mongoose.connection.on('error', (error) => logger.error(`Error en la conexión con MongoDB: ${error.message}`));
 };
@@ -26,4 +28,10 @@ export const connectDB = async () => {
   watchConnection();
 };
 
-export const disconnectDB = () => mongoose.disconnect();
+// Cierre intencional: se quita el aviso de desconexión para no registrarlo como una caída.
+export const disconnectDB = async () => {
+  const wasConnected = mongoose.connection.readyState === mongoose.ConnectionStates.connected;
+  mongoose.connection.off('disconnected', onDisconnected);
+  await mongoose.disconnect();
+  if (wasConnected) logger.info('Conexión a MongoDB cerrada');
+};

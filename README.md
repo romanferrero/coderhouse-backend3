@@ -392,6 +392,14 @@ Para ver un `fatal` real, arrancar con MongoDB apagado o con una variable de ent
 2026-10-14 18:25:54 [fatal]   No se pudo iniciar la aplicación: Error al conectar con MongoDB: connect ECONNREFUSED 127.0.0.1:27017
 ```
 
+Si el arranque falla después de conectar a MongoDB (por ejemplo, con el puerto ocupado), `server.js` registra el `fatal`, cierra la conexión con `disconnectDB` y el proceso termina con código 1 en lugar de quedar colgado:
+
+```
+2026-10-23 15:49:33 [info]    Conexión a MongoDB establecida (localhost:27017/shipnow)
+2026-10-23 15:49:33 [fatal]   No se pudo iniciar la aplicación: listen EADDRINUSE: address already in use :::8080
+2026-10-23 15:49:33 [info]    Conexión a MongoDB cerrada
+```
+
 ### Cómo se reparte por capas
 
 ```
