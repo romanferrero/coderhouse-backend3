@@ -1,0 +1,134 @@
+# Respuestas de error reutilizables (las que tienen una sola causa posible).
+# Los 400 y 409 con varias causas se arman en cada endpoint combinando los ejemplos.
+components:
+  responses:
+    InternalServerError:
+      description: Error interno no previsto.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            InternalServerError:
+              $ref: '#/components/examples/InternalServerError'
+
+    PayloadTooLarge:
+      description: El body supera el tamaño permitido (100 KB).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            PayloadTooLarge:
+              $ref: '#/components/examples/PayloadTooLarge'
+
+    UserNotFound:
+      description: No existe un usuario con ese id.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            UserNotFound:
+              $ref: '#/components/examples/UserNotFound'
+
+    ProductNotFound:
+      description: No existe un producto con ese id o fue dado de baja.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            ProductNotFound:
+              $ref: '#/components/examples/ProductNotFound'
+
+    OrderNotFound:
+      description: No existe un pedido con ese id.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            OrderNotFound:
+              $ref: '#/components/examples/OrderNotFound'
+
+    DeliveryNotFound:
+      description: No existe una entrega con ese id.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            DeliveryNotFound:
+              $ref: '#/components/examples/DeliveryNotFound'
+
+    MockQuantityInvalid:
+      description: >-
+        `qty` no es un entero entre 1 y 100. El `code` indica el motivo: no es un entero, es negativo
+        o está fuera de rango.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            InvalidQuantity:
+              $ref: '#/components/examples/MockInvalidQuantity'
+            NegativeQuantity:
+              $ref: '#/components/examples/MockNegativeQuantity'
+            QuantityOutOfRange:
+              $ref: '#/components/examples/MockQuantityOutOfRange'
+
+    MockQuantityOrRoleInvalid:
+      description: >-
+        `qty` no es un entero entre 1 y 100, o `role` no es un rol válido. Primero se valida la cantidad.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            InvalidQuantity:
+              $ref: '#/components/examples/MockInvalidQuantity'
+            NegativeQuantity:
+              $ref: '#/components/examples/MockNegativeQuantity'
+            QuantityOutOfRange:
+              $ref: '#/components/examples/MockQuantityOutOfRange'
+            InvalidRole:
+              $ref: '#/components/examples/MockRoleInvalid'
+
+    MockGenerationError:
+      description: Falla al generar los datos simulados o error no previsto.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            GenerationFailed:
+              $ref: '#/components/examples/MockGenerationFailed'
+            InternalServerError:
+              $ref: '#/components/examples/InternalServerError'
+
+    MockSeedError:
+      description: >-
+        Falla al generar los datos o al insertarlos en MongoDB. Si falla la inserción, se deshace lo que la carga
+        haya insertado y `details.rolledBack` indica si se pudo.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            SeedFailed:
+              $ref: '#/components/examples/MockSeedFailed'
+            GenerationFailed:
+              $ref: '#/components/examples/MockGenerationFailed'
+            InternalServerError:
+              $ref: '#/components/examples/InternalServerError'
+
+    MockSeedForbidden:
+      description: La escritura de datos de prueba está deshabilitada con `NODE_ENV=production`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            MockSeedForbidden:
+              $ref: '#/components/examples/MockSeedForbidden'

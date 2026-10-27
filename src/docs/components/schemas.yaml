@@ -1,0 +1,715 @@
+# Schemas reutilizables: entidades del dominio, bodies de entrada y formato de las respuestas.
+components:
+  schemas:
+    # ---------- Tipos comunes ----------
+    ObjectId:
+      type: string
+      description: Id de MongoDB (24 caracteres hexadecimales).
+      example: '6650f1a2b3c4d5e6f7a8b9c0'
+
+    UserRole:
+      type: string
+      enum: [ADMIN, USER, COURIER]
+      description: '`USER` es el cliente que hace pedidos y `COURIER` el repartidor.'
+      example: USER
+
+    OrderStatus:
+      type: string
+      enum: [PENDING, ASSIGNED, IN_TRANSIT, DELIVERED, CANCELLED]
+      example: PENDING
+
+    OrderPriority:
+      type: string
+      enum: [LOW, NORMAL, HIGH, URGENT]
+      example: NORMAL
+
+    DeliveryStatus:
+      type: string
+      enum: [WAITING_COURIER, ASSIGNED, IN_TRANSIT, DELIVERED, CANCELLED]
+      example: IN_TRANSIT
+
+    ProductStatus:
+      type: string
+      enum: [AVAILABLE, OUT_OF_STOCK]
+      description: Se deriva del stock. Los productos dados de baja (`DISCONTINUED`) nunca se devuelven.
+      example: AVAILABLE
+
+    LogLevel:
+      type: string
+      enum: [fatal, error, warning, info, http, debug]
+      description: De mayor a menor gravedad.
+      example: info
+
+    # ---------- Formato de las respuestas ----------
+    SuccessResponse:
+      type: object
+      description: Forma de toda respuesta exitosa. El contenido de `payload` depende del endpoint.
+      required: [status, payload]
+      properties:
+        status:
+          type: string
+          enum: [success]
+          example: success
+        payload:
+          description: Resultado de la operación.
+
+    ErrorCode:
+      type: string
+      description: Identificador estable del error, tomado del diccionario de errores (`src/errors/errorDictionary.js`).
+      enum:
+        - VALIDATION_ERROR
+        - MISSING_REQUIRED_FIELDS
+        - BLANK_REQUIRED_FIELDS
+        - INVALID_FIELD_TYPE
+        - NO_FIELDS_TO_UPDATE
+        - INVALID_ROLE
+        - INVALID_STATUS
+        - INVALID_PRIORITY
+        - USER_NOT_FOUND
+        - USER_EMAIL_ALREADY_REGISTERED
+        - LAST_ADMIN_REQUIRED
+        - PRODUCT_NOT_FOUND
+        - PRODUCT_CODE_ALREADY_EXISTS
+        - ORDER_NOT_FOUND
+        - DELIVERY_NOT_FOUND
+        - MOCK_INVALID_QUANTITY
+        - MOCK_NEGATIVE_QUANTITY
+        - MOCK_QUANTITY_OUT_OF_RANGE
+        - MOCK_SEED_FORBIDDEN
+        - MOCK_SEED_REQUIREMENTS_NOT_MET
+        - MOCK_GENERATION_FAILED
+        - MOCK_SEED_FAILED
+        - MOCK_CLEAR_FAILED
+        - ROUTE_NOT_FOUND
+        - INVALID_JSON
+        - PAYLOAD_TOO_LARGE
+        - BAD_REQUEST
+        - DUPLICATE_KEY
+        - INTERNAL_SERVER_ERROR
+
+    ErrorResponse:
+      type: object
+      description: Forma de toda respuesta de error. La arma siempre el middleware global `errorHandler`.
+      required: [status, code, message, details]
+      properties:
+        status:
+          type: string
+          enum: [error]
+          example: error
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+          description: Explicación legible del problema.
+          example: Usuario con id "6650f1a2b3c4d5e6f7a8b9c0" no encontrado.
+        details:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: >-
+            Datos extra del caso (campos faltantes, valores permitidos, parámetro recibido…) o `null`.
+            Siempre está presente. Fuera de producción, los errores con una causa técnica agregan `details.cause`.
+          example:
+            id: '6650f1a2b3c4d5e6f7a8b9c0'
+
+    PaginatedResult:
+      type: object
+      description: Resultado de los listados. `docs` contiene los elementos de la página pedida.
+      required: [docs, total, page, limit, totalPages, hasPrevPage, hasNextPage]
+      properties:
+        docs:
+          type: array
+          items: {}
+        total:
+          type: integer
+          description: Cantidad total de elementos que cumplen el filtro.
+          example: 23
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        totalPages:
+          type: integer
+          description: Nunca es menor a 1, aunque no haya resultados.
+          example: 3
+        hasPrevPage:
+          type: boolean
+          example: false
+        hasNextPage:
+          type: boolean
+          example: true
+
+    # ---------- Usuarios ----------
+    User:
+      type: object
+      description: Usuario tal como lo devuelve la API. El hash de la contraseña nunca se expone.
+      required: [_id, first_name, last_name, email, role, createdAt]
+      properties:
+        _id:
+          $ref: '#/components/schemas/ObjectId'
+        first_name:
+          type: string
+          example: Ana
+        last_name:
+          type: string
+          example: Paz
+        email:
+          type: string
+          format: email
+          description: Se guarda en minúsculas y es único.
+          example: ana.paz@mail.com
+        age:
+          type: integer
+          minimum: 0
+          description: Opcional; no aparece si no se cargó.
+          example: 31
+        role:
+          $ref: '#/components/schemas/UserRole'
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-10-20T14:32:10.512Z'
+
+    UserSummary:
+      type: object
+      description: Datos de contacto de un usuario cuando aparece dentro de un pedido (cliente) o de una entrega (repartidor).
+      properties:
+        _id:
+          $ref: '#/components/schemas/ObjectId'
+        first_name:
+          type: string
+          example: Ana
+        last_name:
+          type: string
+          example: Paz
+        email:
+          type: string
+          format: email
+          example: ana.paz@mail.com
+        role:
+          $ref: '#/components/schemas/UserRole'
+
+    UserCreate:
+      type: object
+      description: >-
+        Body para registrar un usuario. Todo usuario nuevo se crea con rol `USER`; el rol solo se cambia con
+        `PATCH /api/users/{uid}/role`. Los campos que no estén en esta lista se ignoran.
+      required: [first_name, last_name, email, password]
+      properties:
+        first_name:
+          type: string
+          description: Texto no vacío.
+          example: Ana
+        last_name:
+          type: string
+          description: Texto no vacío.
+          example: Paz
+        email:
+          type: string
+          format: email
+          description: Formato de email válido y no registrado.
+          example: ana.paz@mail.com
+        password:
+          type: string
+          minLength: 6
+          description: Se guarda hasheada con bcrypt.
+          example: secreto123
+        age:
+          type: integer
+          minimum: 0
+          example: 31
+
+    UserUpdate:
+      type: object
+      description: >-
+        Body para actualizar un usuario. Se envían solo los campos a cambiar (al menos uno). El rol no se edita acá.
+        Los campos obligatorios, si se envían, no pueden quedar vacíos.
+      minProperties: 1
+      properties:
+        first_name:
+          type: string
+          example: Ana María
+        last_name:
+          type: string
+          example: Paz
+        email:
+          type: string
+          format: email
+          example: anamaria.paz@mail.com
+        password:
+          type: string
+          minLength: 6
+          example: nuevaClave1
+        age:
+          type: integer
+          minimum: 0
+          example: 32
+
+    UserRoleChange:
+      type: object
+      required: [role]
+      properties:
+        role:
+          $ref: '#/components/schemas/UserRole'
+      description: Acepta mayúsculas o minúsculas (`courier` = `COURIER`).
+      example:
+        role: COURIER
+
+    # ---------- Productos ----------
+    Product:
+      type: object
+      required: [_id, title, description, code, price, stock, category, status]
+      properties:
+        _id:
+          $ref: '#/components/schemas/ObjectId'
+        title:
+          type: string
+          example: Caja chica
+        description:
+          type: string
+          example: Caja de cartón corrugado de 20 x 15 x 10 cm
+        code:
+          type: string
+          description: Único, incluso entre productos dados de baja.
+          example: BOX-S
+        price:
+          type: number
+          minimum: 0
+          example: 1500
+        stock:
+          type: integer
+          minimum: 0
+          example: 10
+        category:
+          type: string
+          description: Se guarda en minúsculas.
+          example: embalaje
+        status:
+          $ref: '#/components/schemas/ProductStatus'
+
+    ProductCreate:
+      type: object
+      description: >-
+        Body para crear un producto. El estado no se envía: se calcula a partir del stock
+        (`AVAILABLE` si es mayor a 0, si no `OUT_OF_STOCK`).
+      required: [title, code, price, category]
+      properties:
+        title:
+          type: string
+          example: Caja chica
+        description:
+          type: string
+          example: Caja de cartón corrugado de 20 x 15 x 10 cm
+        code:
+          type: string
+          example: BOX-S
+        price:
+          type: number
+          minimum: 0
+          example: 1500
+        stock:
+          type: integer
+          minimum: 0
+          default: 0
+          example: 10
+        category:
+          type: string
+          example: embalaje
+
+    ProductUpdate:
+      type: object
+      description: >-
+        Body para actualizar un producto. Se envían solo los campos a cambiar (al menos uno).
+        Si se envía `stock`, el estado se recalcula.
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          example: Caja chica reforzada
+        description:
+          type: string
+          example: Caja de doble cartón
+        code:
+          type: string
+          example: BOX-S2
+        price:
+          type: number
+          minimum: 0
+          example: 1800
+        stock:
+          type: integer
+          minimum: 0
+          example: 0
+        category:
+          type: string
+          example: embalaje
+
+    # ---------- Pedidos ----------
+    OrderItem:
+      type: object
+      description: Ítem de un pedido.
+      required: [title, quantity, unitPrice]
+      properties:
+        title:
+          type: string
+          example: Silla de madera
+        quantity:
+          type: integer
+          minimum: 1
+          example: 2
+        unitPrice:
+          type: number
+          minimum: 0
+          example: 45000
+
+    ShippingAddress:
+      type: object
+      required: [street, city, zipCode]
+      properties:
+        street:
+          type: string
+          example: Av. Corrientes 1234
+        city:
+          type: string
+          example: Buenos Aires
+        zipCode:
+          type: string
+          example: C1043
+
+    Order:
+      type: object
+      description: Pedido con los datos de contacto del cliente.
+      required: [_id, code, customer, items, total, shippingAddress, status, priority, createdAt, updatedAt]
+      properties:
+        _id:
+          $ref: '#/components/schemas/ObjectId'
+        code:
+          type: string
+          example: ORD-7KQ2M9XA
+        customer:
+          description: Cliente que hizo el pedido. Es `null` si el usuario ya no existe.
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/UserSummary'
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        total:
+          type: number
+          minimum: 0
+          description: Suma de `quantity * unitPrice` de los ítems.
+          example: 90000
+        shippingAddress:
+          $ref: '#/components/schemas/ShippingAddress'
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        priority:
+          $ref: '#/components/schemas/OrderPriority'
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-10-18T09:12:44.000Z'
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2026-10-18T09:12:44.000Z'
+
+    OrderSummary:
+      type: object
+      description: Datos principales del pedido cuando aparece dentro de una entrega.
+      properties:
+        _id:
+          $ref: '#/components/schemas/ObjectId'
+        code:
+          type: string
+          example: ORD-7KQ2M9XA
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        priority:
+          $ref: '#/components/schemas/OrderPriority'
+        total:
+          type: number
+          example: 90000
+        customer:
+          $ref: '#/components/schemas/ObjectId'
+
+    # ---------- Entregas ----------
+    Delivery:
+      type: object
+      description: Entrega de un pedido. Cada pedido tiene como máximo una.
+      required: [_id, order, courier, trackingCode, status, estimatedAt, deliveredAt, createdAt, updatedAt]
+      properties:
+        _id:
+          $ref: '#/components/schemas/ObjectId'
+        order:
+          description: Pedido de la entrega. Es `null` si el pedido ya no existe.
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/OrderSummary'
+        courier:
+          description: >-
+            Repartidor asignado. Es `null` mientras la entrega está en `WAITING_COURIER` o `CANCELLED`;
+            en `ASSIGNED`, `IN_TRANSIT` y `DELIVERED` siempre tiene uno.
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/UserSummary'
+        trackingCode:
+          type: string
+          example: TRK-8F3KD02LQZ
+        status:
+          $ref: '#/components/schemas/DeliveryStatus'
+        estimatedAt:
+          type: string
+          format: date-time
+          example: '2026-10-20T18:00:00.000Z'
+        deliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Solo tiene valor si la entrega está en `DELIVERED`.
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-10-18T09:12:44.000Z'
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2026-10-18T09:12:44.000Z'
+
+    # ---------- Datos simulados (no se guardan) ----------
+    MockUser:
+      type: object
+      description: >-
+        Usuario simulado con la misma forma que el modelo. El email usa el dominio `@shipnow.test` y la contraseña
+        es siempre `coder123`, que se devuelve ya hasheada.
+      properties:
+        _id:
+          $ref: '#/components/schemas/ObjectId'
+        first_name:
+          type: string
+          example: Mario
+        last_name:
+          type: string
+          example: Miramontes Jaimes
+        email:
+          type: string
+          format: email
+          example: mario.miramontesjaimes.9ab0a@shipnow.test
+        age:
+          type: integer
+          minimum: 18
+          maximum: 75
+          example: 53
+        password:
+          type: string
+          description: Hash bcrypt de `coder123`.
+          example: $2b$10$XveIH873FWn2sSJr/GF70up//qpIot3m4DngGHM/Rqf3qG5BBmkje
+        role:
+          $ref: '#/components/schemas/UserRole'
+
+    MockOrder:
+      type: object
+      description: Pedido simulado. `customer` es el `_id` de uno de los clientes simulados de la misma respuesta.
+      properties:
+        _id:
+          $ref: '#/components/schemas/ObjectId'
+        code:
+          type: string
+          example: ORD-7KQ2M9XA
+        customer:
+          $ref: '#/components/schemas/ObjectId'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        total:
+          type: number
+          example: 90000
+        shippingAddress:
+          $ref: '#/components/schemas/ShippingAddress'
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        priority:
+          $ref: '#/components/schemas/OrderPriority'
+        createdAt:
+          type: string
+          format: date-time
+          description: Cae en los últimos 30 días.
+          example: '2026-10-18T09:12:44.000Z'
+
+    MockDelivery:
+      type: object
+      description: >-
+        Entrega simulada de un pedido simulado. Su estado se deriva del estado del pedido y solo lleva
+        repartidor si el estado lo requiere.
+      properties:
+        _id:
+          $ref: '#/components/schemas/ObjectId'
+        order:
+          $ref: '#/components/schemas/ObjectId'
+        courier:
+          type: string
+          nullable: true
+          description: '`_id` de uno de los repartidores simulados de la misma respuesta, o `null`.'
+          example: '6650f1a2b3c4d5e6f7a8b9c1'
+        trackingCode:
+          type: string
+          example: TRK-8F3KD02LQZ
+        status:
+          $ref: '#/components/schemas/DeliveryStatus'
+        estimatedAt:
+          type: string
+          format: date-time
+          example: '2026-10-20T18:00:00.000Z'
+        deliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-10-18T09:12:44.000Z'
+
+    MockOrdersResult:
+      type: object
+      properties:
+        customers:
+          type: array
+          description: Clientes simulados (rol `USER`) a los que pertenecen los pedidos.
+          items:
+            $ref: '#/components/schemas/MockUser'
+        orders:
+          type: array
+          items:
+            $ref: '#/components/schemas/MockOrder'
+
+    MockDeliveriesResult:
+      type: object
+      description: Set completo y relacionado entre sí.
+      properties:
+        customers:
+          type: array
+          items:
+            $ref: '#/components/schemas/MockUser'
+        couriers:
+          type: array
+          items:
+            $ref: '#/components/schemas/MockUser'
+        orders:
+          type: array
+          items:
+            $ref: '#/components/schemas/MockOrder'
+        deliveries:
+          type: array
+          items:
+            $ref: '#/components/schemas/MockDelivery'
+
+    # ---------- Resultados de la carga de datos de prueba ----------
+    SeedDatasetResult:
+      type: object
+      properties:
+        insertados:
+          type: object
+          description: Cantidad insertada en cada colección. Se crea una entrega por pedido.
+          properties:
+            users:
+              type: integer
+              example: 10
+            couriers:
+              type: integer
+              example: 3
+            orders:
+              type: integer
+              example: 20
+            deliveries:
+              type: integer
+              example: 20
+
+    SeedUsersResult:
+      type: object
+      properties:
+        insertados:
+          type: integer
+          example: 10
+        coleccion:
+          type: string
+          enum: [users]
+          example: users
+
+    SeedCouriersResult:
+      type: object
+      properties:
+        insertados:
+          type: integer
+          example: 3
+        coleccion:
+          type: string
+          enum: [users]
+          example: users
+        rol:
+          type: string
+          enum: [COURIER]
+          example: COURIER
+
+    SeedOrdersResult:
+      type: object
+      properties:
+        insertados:
+          type: integer
+          example: 5
+        coleccion:
+          type: string
+          enum: [orders]
+          example: orders
+        entregas:
+          type: integer
+          description: Entregas creadas (una por pedido).
+          example: 5
+
+    ClearMocksResult:
+      type: object
+      properties:
+        eliminados:
+          type: object
+          description: Cantidad eliminada de cada colección. Solo se borran datos de prueba.
+          properties:
+            users:
+              type: integer
+              example: 13
+            orders:
+              type: integer
+              example: 20
+            deliveries:
+              type: integer
+              example: 20
+
+    # ---------- Logger ----------
+    LoggerTestResult:
+      type: object
+      properties:
+        nivelMinimo:
+          $ref: '#/components/schemas/LogLevel'
+        registrados:
+          type: array
+          description: Niveles que se registraron (iguales o más graves que el mínimo del entorno).
+          items:
+            $ref: '#/components/schemas/LogLevel'
+          example: [debug, http, info, warning, error, fatal]
+        omitidos:
+          type: array
+          description: Niveles descartados por ser menos graves que el mínimo.
+          items:
+            $ref: '#/components/schemas/LogLevel'
+          example: []
+        enErrorLog:
+          type: array
+          description: Niveles que además se escriben en `logs/error.log`.
+          items:
+            $ref: '#/components/schemas/LogLevel'
+          example: [error, fatal]

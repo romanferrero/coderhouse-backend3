@@ -1,0 +1,409 @@
+# Ejemplos de respuestas de error, con el mismo code, message y details que devuelve la API.
+# Las respuestas de cada endpoint combinan los que le corresponden.
+components:
+  examples:
+    # ---------- Body y request ----------
+    InvalidJson:
+      summary: INVALID_JSON — el body no es un JSON válido
+      description: '`details.cause` solo aparece fuera de producción; en producción `details` es `null`.'
+      value:
+        status: error
+        code: INVALID_JSON
+        message: El cuerpo de la solicitud no es un JSON válido.
+        details:
+          cause: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+
+    PayloadTooLarge:
+      summary: PAYLOAD_TOO_LARGE — el body supera los 100 KB
+      value:
+        status: error
+        code: PAYLOAD_TOO_LARGE
+        message: El cuerpo de la solicitud supera el tamaño permitido.
+        details: null
+
+    InternalServerError:
+      summary: INTERNAL_SERVER_ERROR — falla no prevista
+      description: '`details.cause` solo aparece fuera de producción; en producción `details` es `null`.'
+      value:
+        status: error
+        code: INTERNAL_SERVER_ERROR
+        message: Error interno del servidor.
+        details:
+          cause: Client must be connected before running operations
+
+    # ---------- Usuarios ----------
+    UserMissingFields:
+      summary: MISSING_REQUIRED_FIELDS — faltan campos obligatorios
+      value:
+        status: error
+        code: MISSING_REQUIRED_FIELDS
+        message: 'Faltan campos obligatorios: last_name, email, password.'
+        details:
+          fields: [last_name, email, password]
+
+    UserInvalidFieldType:
+      summary: INVALID_FIELD_TYPE — un campo de texto no llegó como string
+      value:
+        status: error
+        code: INVALID_FIELD_TYPE
+        message: 'Estos campos deben ser texto: email.'
+        details:
+          fields: [email]
+          expected: string
+
+    UserInvalidEmail:
+      summary: VALIDATION_ERROR — email con formato inválido
+      value:
+        status: error
+        code: VALIDATION_ERROR
+        message: El email no tiene un formato válido.
+        details:
+          field: email
+
+    UserShortPassword:
+      summary: VALIDATION_ERROR — contraseña de menos de 6 caracteres
+      value:
+        status: error
+        code: VALIDATION_ERROR
+        message: La contraseña debe tener al menos 6 caracteres.
+        details:
+          field: password
+
+    UserInvalidAge:
+      summary: VALIDATION_ERROR — edad que no es un entero mayor o igual a 0
+      value:
+        status: error
+        code: VALIDATION_ERROR
+        message: La edad debe ser un número entero mayor o igual a 0.
+        details:
+          field: age
+
+    UserNoFieldsToUpdate:
+      summary: NO_FIELDS_TO_UPDATE — el body no trae ningún campo editable
+      value:
+        status: error
+        code: NO_FIELDS_TO_UPDATE
+        message: 'No se enviaron campos para actualizar. Permitidos: first_name, last_name, email, age, password.'
+        details:
+          allowed: [first_name, last_name, email, age, password]
+
+    UserBlankFields:
+      summary: BLANK_REQUIRED_FIELDS — se intenta dejar vacío un campo obligatorio
+      value:
+        status: error
+        code: BLANK_REQUIRED_FIELDS
+        message: 'Estos campos no pueden quedar vacíos: email.'
+        details:
+          fields: [email]
+
+    UserRoleFilterInvalid:
+      summary: INVALID_ROLE — rol fuera de ADMIN, USER y COURIER
+      value:
+        status: error
+        code: INVALID_ROLE
+        message: 'Rol inválido. Valores permitidos: ADMIN, USER, COURIER.'
+        details:
+          received: JEFE
+          allowed: [ADMIN, USER, COURIER]
+
+    UserRoleMissing:
+      summary: INVALID_ROLE — el body no trae `role`
+      value:
+        status: error
+        code: INVALID_ROLE
+        message: 'Rol inválido. Valores permitidos: ADMIN, USER, COURIER.'
+        details:
+          received: null
+          allowed: [ADMIN, USER, COURIER]
+
+    UserNotFound:
+      summary: USER_NOT_FOUND — no existe un usuario con ese id
+      value:
+        status: error
+        code: USER_NOT_FOUND
+        message: Usuario con id "6650f1a2b3c4d5e6f7a8b9c0" no encontrado.
+        details:
+          id: '6650f1a2b3c4d5e6f7a8b9c0'
+
+    UserEmailAlreadyRegistered:
+      summary: USER_EMAIL_ALREADY_REGISTERED — el email ya está en uso
+      value:
+        status: error
+        code: USER_EMAIL_ALREADY_REGISTERED
+        message: El email "ana.paz@mail.com" ya está registrado.
+        details:
+          email: ana.paz@mail.com
+
+    LastAdminRequired:
+      summary: LAST_ADMIN_REQUIRED — es el único ADMIN
+      value:
+        status: error
+        code: LAST_ADMIN_REQUIRED
+        message: No se puede quitar o eliminar al último usuario ADMIN.
+        details: null
+
+    # ---------- Productos ----------
+    ProductMissingFields:
+      summary: MISSING_REQUIRED_FIELDS — faltan campos obligatorios
+      value:
+        status: error
+        code: MISSING_REQUIRED_FIELDS
+        message: 'Faltan campos obligatorios: code, price.'
+        details:
+          fields: [code, price]
+
+    ProductInvalidFieldType:
+      summary: INVALID_FIELD_TYPE — un campo de texto no llegó como string
+      value:
+        status: error
+        code: INVALID_FIELD_TYPE
+        message: 'Estos campos deben ser texto: code.'
+        details:
+          fields: [code]
+          expected: string
+
+    ProductInvalidPrice:
+      summary: VALIDATION_ERROR — precio negativo o que no es un número
+      value:
+        status: error
+        code: VALIDATION_ERROR
+        message: El precio debe ser un número mayor o igual a 0.
+        details:
+          field: price
+
+    ProductInvalidStock:
+      summary: VALIDATION_ERROR — stock que no es un entero mayor o igual a 0
+      value:
+        status: error
+        code: VALIDATION_ERROR
+        message: El stock debe ser un número entero mayor o igual a 0.
+        details:
+          field: stock
+
+    ProductNoFieldsToUpdate:
+      summary: NO_FIELDS_TO_UPDATE — el body no trae ningún campo editable
+      value:
+        status: error
+        code: NO_FIELDS_TO_UPDATE
+        message: 'No se enviaron campos para actualizar. Permitidos: title, description, code, price, stock, category.'
+        details:
+          allowed: [title, description, code, price, stock, category]
+
+    ProductBlankFields:
+      summary: BLANK_REQUIRED_FIELDS — se intenta dejar vacío un campo obligatorio
+      value:
+        status: error
+        code: BLANK_REQUIRED_FIELDS
+        message: 'Estos campos no pueden quedar vacíos: title.'
+        details:
+          fields: [title]
+
+    ProductStatusInvalid:
+      summary: INVALID_STATUS — estado fuera de AVAILABLE y OUT_OF_STOCK
+      value:
+        status: error
+        code: INVALID_STATUS
+        message: 'Estado inválido. Valores permitidos: AVAILABLE, OUT_OF_STOCK.'
+        details:
+          received: discontinued
+          allowed: [AVAILABLE, OUT_OF_STOCK]
+
+    ProductNotFound:
+      summary: PRODUCT_NOT_FOUND — no existe un producto con ese id (o fue dado de baja)
+      value:
+        status: error
+        code: PRODUCT_NOT_FOUND
+        message: Producto con id "6650f1a2b3c4d5e6f7a8b9c0" no encontrado.
+        details:
+          id: '6650f1a2b3c4d5e6f7a8b9c0'
+
+    ProductCodeAlreadyExists:
+      summary: PRODUCT_CODE_ALREADY_EXISTS — el código ya está en uso
+      value:
+        status: error
+        code: PRODUCT_CODE_ALREADY_EXISTS
+        message: Ya existe un producto con el código "BOX-S".
+        details:
+          code: BOX-S
+
+    # ---------- Pedidos ----------
+    OrderStatusInvalid:
+      summary: INVALID_STATUS — estado de pedido inválido
+      value:
+        status: error
+        code: INVALID_STATUS
+        message: 'Estado inválido. Valores permitidos: PENDING, ASSIGNED, IN_TRANSIT, DELIVERED, CANCELLED.'
+        details:
+          received: volando
+          allowed: [PENDING, ASSIGNED, IN_TRANSIT, DELIVERED, CANCELLED]
+
+    OrderPriorityInvalid:
+      summary: INVALID_PRIORITY — prioridad de pedido inválida
+      value:
+        status: error
+        code: INVALID_PRIORITY
+        message: 'Prioridad inválida. Valores permitidos: LOW, NORMAL, HIGH, URGENT.'
+        details:
+          received: ya
+          allowed: [LOW, NORMAL, HIGH, URGENT]
+
+    OrderNotFound:
+      summary: ORDER_NOT_FOUND — no existe un pedido con ese id
+      value:
+        status: error
+        code: ORDER_NOT_FOUND
+        message: Pedido con id "6650f1a2b3c4d5e6f7a8b9c0" no encontrado.
+        details:
+          id: '6650f1a2b3c4d5e6f7a8b9c0'
+
+    # ---------- Entregas ----------
+    DeliveryStatusInvalid:
+      summary: INVALID_STATUS — estado de entrega inválido
+      value:
+        status: error
+        code: INVALID_STATUS
+        message: 'Estado inválido. Valores permitidos: WAITING_COURIER, ASSIGNED, IN_TRANSIT, DELIVERED, CANCELLED.'
+        details:
+          received: perdido
+          allowed: [WAITING_COURIER, ASSIGNED, IN_TRANSIT, DELIVERED, CANCELLED]
+
+    DeliveryNotFound:
+      summary: DELIVERY_NOT_FOUND — no existe una entrega con ese id
+      value:
+        status: error
+        code: DELIVERY_NOT_FOUND
+        message: Entrega con id "6650f1a2b3c4d5e6f7a8b9c0" no encontrada.
+        details:
+          id: '6650f1a2b3c4d5e6f7a8b9c0'
+
+    # ---------- Mocks ----------
+    MockInvalidQuantity:
+      summary: MOCK_INVALID_QUANTITY — la cantidad no es un entero (abc, 2.5, parámetro repetido)
+      value:
+        status: error
+        code: MOCK_INVALID_QUANTITY
+        message: '"qty" debe ser un número entero entre 1 y 100.'
+        details:
+          param: qty
+          received: abc
+          min: 1
+          max: 100
+
+    MockNegativeQuantity:
+      summary: MOCK_NEGATIVE_QUANTITY — la cantidad es negativa
+      value:
+        status: error
+        code: MOCK_NEGATIVE_QUANTITY
+        message: '"qty" no puede ser negativo. Debe ser un entero entre 1 y 100.'
+        details:
+          param: qty
+          received: '-5'
+          min: 1
+          max: 100
+
+    MockQuantityOutOfRange:
+      summary: MOCK_QUANTITY_OUT_OF_RANGE — la cantidad es 0 o supera 100
+      value:
+        status: error
+        code: MOCK_QUANTITY_OUT_OF_RANGE
+        message: '"qty" debe estar entre 1 y 100.'
+        details:
+          param: qty
+          received: '1000'
+          min: 1
+          max: 100
+
+    MockSeedInvalidQuantity:
+      summary: MOCK_INVALID_QUANTITY — `users`, `couriers` u `orders` no es un entero
+      value:
+        status: error
+        code: MOCK_INVALID_QUANTITY
+        message: '"couriers" debe ser un número entero entre 1 y 100.'
+        details:
+          param: couriers
+          received: dos
+          min: 1
+          max: 100
+
+    MockSeedNegativeQuantity:
+      summary: MOCK_NEGATIVE_QUANTITY — `users`, `couriers` u `orders` es negativo
+      value:
+        status: error
+        code: MOCK_NEGATIVE_QUANTITY
+        message: '"users" no puede ser negativo. Debe ser un entero entre 1 y 100.'
+        details:
+          param: users
+          received: '-1'
+          min: 1
+          max: 100
+
+    MockSeedQuantityOutOfRange:
+      summary: MOCK_QUANTITY_OUT_OF_RANGE — `users`, `couriers` u `orders` es 0 o supera 100
+      value:
+        status: error
+        code: MOCK_QUANTITY_OUT_OF_RANGE
+        message: '"orders" debe estar entre 1 y 100.'
+        details:
+          param: orders
+          received: '999'
+          min: 1
+          max: 100
+
+    MockRoleInvalid:
+      summary: INVALID_ROLE — `role` fuera de ADMIN, USER y COURIER
+      value:
+        status: error
+        code: INVALID_ROLE
+        message: 'Rol inválido. Valores permitidos: ADMIN, USER, COURIER.'
+        details:
+          received: JEFE
+          allowed: [ADMIN, USER, COURIER]
+
+    MockSeedForbidden:
+      summary: MOCK_SEED_FORBIDDEN — escritura de datos de prueba con NODE_ENV=production
+      value:
+        status: error
+        code: MOCK_SEED_FORBIDDEN
+        message: La carga de datos de prueba está deshabilitada en producción.
+        details: null
+
+    MockSeedRequirementsNotMet:
+      summary: MOCK_SEED_REQUIREMENTS_NOT_MET — no hay clientes y repartidores de prueba cargados
+      value:
+        status: error
+        code: MOCK_SEED_REQUIREMENTS_NOT_MET
+        message: >-
+          Se necesitan clientes (USER) y repartidores (COURIER) de prueba en la base.
+          Cargalos antes con POST /api/mocks/seed/users y POST /api/mocks/seed/couriers.
+        details:
+          customers: 0
+          couriers: 0
+
+    MockGenerationFailed:
+      summary: MOCK_GENERATION_FAILED — falla al generar los datos simulados
+      value:
+        status: error
+        code: MOCK_GENERATION_FAILED
+        message: No se pudieron generar los datos de prueba.
+        details:
+          cause: No hay repartidores para asignar a la entrega del pedido ORD-7KQ2M9XA.
+
+    MockSeedFailed:
+      summary: MOCK_SEED_FAILED — falla de MongoDB durante la carga (se deshace lo insertado)
+      value:
+        status: error
+        code: MOCK_SEED_FAILED
+        message: No se pudieron cargar los datos de prueba en la colección "users".
+        details:
+          collection: users
+          rolledBack: false
+          cause: connect ECONNREFUSED 127.0.0.1:27017
+
+    MockClearFailed:
+      summary: MOCK_CLEAR_FAILED — falla de MongoDB al limpiar los datos de prueba
+      value:
+        status: error
+        code: MOCK_CLEAR_FAILED
+        message: No se pudieron eliminar los datos de prueba de la base de datos.
+        details:
+          cause: connect ECONNREFUSED 127.0.0.1:27017
