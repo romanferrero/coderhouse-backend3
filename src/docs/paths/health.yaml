@@ -1,0 +1,19 @@
+paths:
+  /api/health:
+    get:
+      tags: [Health]
+      summary: Verifica que el servidor responde
+      description: No consulta la base de datos. Es el único endpoint que no usa el formato `{ status, payload }`.
+      operationId: health
+      responses:
+        '200':
+          description: El servidor está levantado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+                    example: ok

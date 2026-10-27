@@ -1,0 +1,208 @@
+paths:
+  /api/products:
+    get:
+      tags: [Products]
+      summary: Lista productos
+      description: >-
+        Lista paginada del catálogo, del más nuevo al más viejo. Por defecto solo muestra productos con stock
+        (`AVAILABLE`); los dados de baja nunca aparecen.
+      operationId: getProducts
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: category
+          in: query
+          required: false
+          description: Filtra por categoría (no distingue mayúsculas).
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          description: >-
+            `AVAILABLE` (por defecto) u `OUT_OF_STOCK` (acepta minúsculas). Otro valor, incluido `DISCONTINUED`,
+            → `INVALID_STATUS`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Página de productos.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        allOf:
+                          - $ref: '#/components/schemas/PaginatedResult'
+                          - type: object
+                            properties:
+                              docs:
+                                type: array
+                                items:
+                                  $ref: '#/components/schemas/Product'
+        '400':
+          description: Estado inválido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                InvalidStatus:
+                  $ref: '#/components/examples/ProductStatusInvalid'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags: [Products]
+      summary: Crea un producto
+      description: >-
+        Crea un producto. El estado se calcula a partir del stock. Las validaciones se hacen en este orden:
+        campos obligatorios, tipo de los campos de texto, precio y stock, y código repetido.
+      operationId: createProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductCreate'
+      responses:
+        '201':
+          description: Producto creado.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/Product'
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                MissingFields:
+                  $ref: '#/components/examples/ProductMissingFields'
+                InvalidFieldType:
+                  $ref: '#/components/examples/ProductInvalidFieldType'
+                InvalidPrice:
+                  $ref: '#/components/examples/ProductInvalidPrice'
+                InvalidStock:
+                  $ref: '#/components/examples/ProductInvalidStock'
+                InvalidJson:
+                  $ref: '#/components/examples/InvalidJson'
+        '409':
+          description: Ya existe un producto con ese código (aunque esté dado de baja).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                CodeAlreadyExists:
+                  $ref: '#/components/examples/ProductCodeAlreadyExists'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/products/{pid}:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+
+    get:
+      tags: [Products]
+      summary: Obtiene un producto
+      operationId: getProductById
+      responses:
+        '200':
+          description: Producto encontrado.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/ProductNotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags: [Products]
+      summary: Actualiza un producto
+      description: Actualiza solo los campos enviados. Si se envía `stock`, el estado se recalcula.
+      operationId: updateProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdate'
+      responses:
+        '200':
+          description: Producto actualizado.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/Product'
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                NoFieldsToUpdate:
+                  $ref: '#/components/examples/ProductNoFieldsToUpdate'
+                BlankFields:
+                  $ref: '#/components/examples/ProductBlankFields'
+                InvalidFieldType:
+                  $ref: '#/components/examples/ProductInvalidFieldType'
+                InvalidPrice:
+                  $ref: '#/components/examples/ProductInvalidPrice'
+                InvalidStock:
+                  $ref: '#/components/examples/ProductInvalidStock'
+                InvalidJson:
+                  $ref: '#/components/examples/InvalidJson'
+        '404':
+          $ref: '#/components/responses/ProductNotFound'
+        '409':
+          description: El código ya lo usa otro producto.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                CodeAlreadyExists:
+                  $ref: '#/components/examples/ProductCodeAlreadyExists'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Products]
+      summary: Da de baja un producto
+      description: 'Baja lógica: el producto pasa a `DISCONTINUED` y deja de devolverse, pero su código queda reservado.'
+      operationId: deleteProduct
+      responses:
+        '204':
+          description: Producto dado de baja. La respuesta no tiene body.
+        '404':
+          $ref: '#/components/responses/ProductNotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'

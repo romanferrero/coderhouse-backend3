@@ -1,0 +1,272 @@
+paths:
+  /api/users:
+    get:
+      tags: [Users]
+      summary: Lista usuarios
+      description: Lista paginada de usuarios, del más nuevo al más viejo. Se puede filtrar por rol.
+      operationId: getUsers
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: role
+          in: query
+          required: false
+          description: 'Filtra por rol: `ADMIN`, `USER` o `COURIER` (acepta minúsculas).'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Página de usuarios.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        allOf:
+                          - $ref: '#/components/schemas/PaginatedResult'
+                          - type: object
+                            properties:
+                              docs:
+                                type: array
+                                items:
+                                  $ref: '#/components/schemas/User'
+        '400':
+          description: Rol inválido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                InvalidRole:
+                  $ref: '#/components/examples/UserRoleFilterInvalid'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags: [Users]
+      summary: Registra un usuario
+      description: >-
+        Crea un usuario con rol `USER`. La contraseña se guarda hasheada y nunca se devuelve.
+        Las validaciones se hacen en este orden: campos obligatorios, tipo de los campos de texto,
+        formato (email, contraseña, edad) y email repetido.
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '201':
+          description: Usuario creado.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/User'
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                MissingFields:
+                  $ref: '#/components/examples/UserMissingFields'
+                InvalidFieldType:
+                  $ref: '#/components/examples/UserInvalidFieldType'
+                InvalidEmail:
+                  $ref: '#/components/examples/UserInvalidEmail'
+                ShortPassword:
+                  $ref: '#/components/examples/UserShortPassword'
+                InvalidAge:
+                  $ref: '#/components/examples/UserInvalidAge'
+                InvalidJson:
+                  $ref: '#/components/examples/InvalidJson'
+        '409':
+          description: El email ya está registrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                EmailAlreadyRegistered:
+                  $ref: '#/components/examples/UserEmailAlreadyRegistered'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/users/{uid}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+
+    get:
+      tags: [Users]
+      summary: Obtiene un usuario
+      operationId: getUserById
+      responses:
+        '200':
+          description: Usuario encontrado.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/User'
+        '404':
+          $ref: '#/components/responses/UserNotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags: [Users]
+      summary: Actualiza un usuario
+      description: >-
+        Actualiza solo los campos enviados. El rol no se cambia acá (si se envía, se ignora): se usa
+        `PATCH /api/users/{uid}/role`. Si se envía `password`, se vuelve a hashear.
+      operationId: updateUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: Usuario actualizado.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/User'
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                NoFieldsToUpdate:
+                  $ref: '#/components/examples/UserNoFieldsToUpdate'
+                BlankFields:
+                  $ref: '#/components/examples/UserBlankFields'
+                InvalidFieldType:
+                  $ref: '#/components/examples/UserInvalidFieldType'
+                InvalidEmail:
+                  $ref: '#/components/examples/UserInvalidEmail'
+                ShortPassword:
+                  $ref: '#/components/examples/UserShortPassword'
+                InvalidAge:
+                  $ref: '#/components/examples/UserInvalidAge'
+                InvalidJson:
+                  $ref: '#/components/examples/InvalidJson'
+        '404':
+          $ref: '#/components/responses/UserNotFound'
+        '409':
+          description: El email ya lo usa otro usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                EmailAlreadyRegistered:
+                  $ref: '#/components/examples/UserEmailAlreadyRegistered'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Users]
+      summary: Elimina un usuario
+      description: Elimina el usuario de forma definitiva. No se puede eliminar al último `ADMIN`.
+      operationId: deleteUser
+      responses:
+        '204':
+          description: Usuario eliminado. La respuesta no tiene body.
+        '404':
+          $ref: '#/components/responses/UserNotFound'
+        '409':
+          description: Es el último usuario `ADMIN`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                LastAdminRequired:
+                  $ref: '#/components/examples/LastAdminRequired'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/users/{uid}/role:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+
+    patch:
+      tags: [Users]
+      summary: Cambia el rol de un usuario
+      description: >-
+        Asigna `ADMIN`, `USER` o `COURIER`. Primero se valida el rol y después que el usuario exista.
+        Si ya tiene ese rol, se devuelve sin cambios. No se puede quitar el rol al último `ADMIN`.
+      operationId: changeUserRole
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRoleChange'
+      responses:
+        '200':
+          description: Usuario con el rol actualizado.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/User'
+        '400':
+          description: Rol inválido o ausente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                InvalidRole:
+                  $ref: '#/components/examples/UserRoleFilterInvalid'
+                MissingRole:
+                  $ref: '#/components/examples/UserRoleMissing'
+                InvalidJson:
+                  $ref: '#/components/examples/InvalidJson'
+        '404':
+          $ref: '#/components/responses/UserNotFound'
+        '409':
+          description: Se intenta quitar el rol al último `ADMIN`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                LastAdminRequired:
+                  $ref: '#/components/examples/LastAdminRequired'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalServerError'

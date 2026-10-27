@@ -1,0 +1,51 @@
+paths:
+  /api/loggerTest:
+    get:
+      tags: [Logger]
+      summary: Prueba los niveles del logger (herramienta de validación)
+      description: >-
+        **Herramienta interna para validar la configuración del logging, no una funcionalidad del negocio.**
+
+
+        Emite un log de ejemplo de cada nivel (`debug`, `http`, `info`, `warning`, `error`, `fatal`) con el prefijo
+        `[loggerTest]` y responde qué niveles se registraron según el entorno. Sirve para comprobar dónde aparece
+        cada uno: consola, `logs/app-AAAA-MM-DD.log` (todos desde el nivel mínimo) y `logs/error.log` (solo `error`
+        y `fatal`).
+
+
+        El nivel mínimo sale de `NODE_ENV`: `debug` en development, `info` en production y `warning` en test.
+        No recibe parámetros ni modifica datos.
+      operationId: loggerTest
+      responses:
+        '200':
+          description: Niveles emitidos, registrados y omitidos.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/LoggerTestResult'
+              examples:
+                Development:
+                  summary: NODE_ENV=development
+                  value:
+                    status: success
+                    payload:
+                      nivelMinimo: debug
+                      registrados: [debug, http, info, warning, error, fatal]
+                      omitidos: []
+                      enErrorLog: [error, fatal]
+                Production:
+                  summary: NODE_ENV=production
+                  value:
+                    status: success
+                    payload:
+                      nivelMinimo: info
+                      registrados: [info, warning, error, fatal]
+                      omitidos: [debug, http]
+                      enErrorLog: [error, fatal]
+        '500':
+          $ref: '#/components/responses/InternalServerError'

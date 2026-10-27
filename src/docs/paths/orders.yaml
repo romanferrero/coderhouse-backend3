@@ -1,0 +1,85 @@
+paths:
+  /api/orders:
+    get:
+      tags: [Orders]
+      summary: Lista pedidos
+      description: >-
+        Lista paginada de pedidos, del más nuevo al más viejo, con los datos de contacto del cliente.
+        Se puede filtrar por estado y por prioridad.
+      operationId: getOrders
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          required: false
+          description: >-
+            Filtra por estado: `PENDING`, `ASSIGNED`, `IN_TRANSIT`, `DELIVERED` o `CANCELLED` (acepta minúsculas).
+            Otro valor → `INVALID_STATUS`.
+          schema:
+            type: string
+        - name: priority
+          in: query
+          required: false
+          description: >-
+            Filtra por prioridad: `LOW`, `NORMAL`, `HIGH` o `URGENT` (acepta minúsculas).
+            Otro valor → `INVALID_PRIORITY`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Página de pedidos.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        allOf:
+                          - $ref: '#/components/schemas/PaginatedResult'
+                          - type: object
+                            properties:
+                              docs:
+                                type: array
+                                items:
+                                  $ref: '#/components/schemas/Order'
+        '400':
+          description: Estado o prioridad inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                InvalidStatus:
+                  $ref: '#/components/examples/OrderStatusInvalid'
+                InvalidPriority:
+                  $ref: '#/components/examples/OrderPriorityInvalid'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/orders/{oid}:
+    get:
+      tags: [Orders]
+      summary: Obtiene un pedido
+      description: Devuelve el pedido con los datos de contacto del cliente.
+      operationId: getOrderById
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Pedido encontrado.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/Order'
+        '404':
+          $ref: '#/components/responses/OrderNotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'

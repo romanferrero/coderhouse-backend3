@@ -1,0 +1,310 @@
+# Módulo de mocking. Los GET solo devuelven datos simulados (no escriben en la base);
+# los POST y el DELETE insertan o limpian datos de prueba en MongoDB.
+paths:
+  # ---------- Solo devuelven datos simulados ----------
+  /api/mocks/users:
+    get:
+      tags: [Mocks]
+      summary: Genera usuarios simulados (no se guardan)
+      description: >-
+        Devuelve usuarios generados con Faker, con la misma forma que el modelo. **No escribe en la base.**
+        Sin `role`, cada usuario sale al azar entre `USER` y `COURIER`.
+      operationId: getMockUsers
+      parameters:
+        - $ref: '#/components/parameters/MockQty'
+        - $ref: '#/components/parameters/MockRole'
+      responses:
+        '200':
+          description: Usuarios simulados.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/MockUser'
+        '400':
+          $ref: '#/components/responses/MockQuantityOrRoleInvalid'
+        '500':
+          $ref: '#/components/responses/MockGenerationError'
+
+  /api/mocks/couriers:
+    get:
+      tags: [Mocks]
+      summary: Genera repartidores simulados (no se guardan)
+      description: Devuelve usuarios simulados con rol `COURIER`. **No escribe en la base.**
+      operationId: getMockCouriers
+      parameters:
+        - $ref: '#/components/parameters/MockQty'
+      responses:
+        '200':
+          description: Repartidores simulados.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/MockUser'
+        '400':
+          $ref: '#/components/responses/MockQuantityInvalid'
+        '500':
+          $ref: '#/components/responses/MockGenerationError'
+
+  /api/mocks/orders:
+    get:
+      tags: [Mocks]
+      summary: Genera pedidos simulados (no se guardan)
+      description: >-
+        Devuelve `qty` pedidos y los clientes a los que pertenecen (un cliente cada 3 pedidos, redondeando
+        hacia arriba), para que las referencias se puedan seguir. **No escribe en la base.**
+      operationId: getMockOrders
+      parameters:
+        - $ref: '#/components/parameters/MockQty'
+      responses:
+        '200':
+          description: Pedidos simulados con sus clientes.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/MockOrdersResult'
+        '400':
+          $ref: '#/components/responses/MockQuantityInvalid'
+        '500':
+          $ref: '#/components/responses/MockGenerationError'
+
+  /api/mocks/deliveries:
+    get:
+      tags: [Mocks]
+      summary: Genera entregas simuladas (no se guardan)
+      description: >-
+        Devuelve `qty` entregas con sus pedidos, clientes y repartidores, todo relacionado entre sí.
+        El estado de cada entrega se deriva del estado de su pedido. **No escribe en la base.**
+      operationId: getMockDeliveries
+      parameters:
+        - $ref: '#/components/parameters/MockQty'
+      responses:
+        '200':
+          description: Set completo de datos simulados.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/MockDeliveriesResult'
+        '400':
+          $ref: '#/components/responses/MockQuantityInvalid'
+        '500':
+          $ref: '#/components/responses/MockGenerationError'
+
+  # ---------- Insertan o limpian datos de prueba en MongoDB ----------
+  /api/mocks/seed:
+    post:
+      tags: [Mocks]
+      summary: Carga un set completo de datos de prueba
+      description: >-
+        Inserta en MongoDB clientes, repartidores, pedidos de esos clientes y una entrega por pedido,
+        todo relacionado. **No recibe body:** las cantidades van como parámetros de query (cada una es un
+        entero entre 1 y 100). Si un paso falla, se deshace lo que esta carga haya insertado.
+        Todos los usuarios de prueba usan el dominio `@shipnow.test` y la contraseña `coder123`.
+        Deshabilitado con `NODE_ENV=production`.
+      operationId: seedDataset
+      parameters:
+        - name: users
+          in: query
+          required: false
+          description: Cantidad de clientes (rol `USER`). Entero entre 1 y 100.
+          schema:
+            type: integer
+            default: 10
+        - name: couriers
+          in: query
+          required: false
+          description: Cantidad de repartidores (rol `COURIER`). Entero entre 1 y 100.
+          schema:
+            type: integer
+            default: 3
+        - name: orders
+          in: query
+          required: false
+          description: Cantidad de pedidos. Se crea una entrega por pedido. Entero entre 1 y 100.
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '201':
+          description: Datos de prueba insertados.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/SeedDatasetResult'
+        '400':
+          description: Alguna cantidad es inválida. `details.param` indica cuál.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                InvalidQuantity:
+                  $ref: '#/components/examples/MockSeedInvalidQuantity'
+                NegativeQuantity:
+                  $ref: '#/components/examples/MockSeedNegativeQuantity'
+                QuantityOutOfRange:
+                  $ref: '#/components/examples/MockSeedQuantityOutOfRange'
+        '403':
+          $ref: '#/components/responses/MockSeedForbidden'
+        '500':
+          $ref: '#/components/responses/MockSeedError'
+
+    delete:
+      tags: [Mocks]
+      summary: Elimina los datos de prueba
+      description: >-
+        Borra solo lo generado por el módulo de mocks: los usuarios con email `@shipnow.test`, sus pedidos
+        y las entregas de esos pedidos o de esos repartidores. No toca datos reales.
+        Deshabilitado con `NODE_ENV=production`.
+      operationId: clearMockData
+      responses:
+        '200':
+          description: Cantidad eliminada de cada colección.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/ClearMocksResult'
+        '403':
+          $ref: '#/components/responses/MockSeedForbidden'
+        '500':
+          description: Falla de MongoDB al limpiar los datos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                ClearFailed:
+                  $ref: '#/components/examples/MockClearFailed'
+
+  /api/mocks/seed/users:
+    post:
+      tags: [Mocks]
+      summary: Carga usuarios de prueba
+      description: >-
+        Inserta en MongoDB `qty` usuarios simulados. **No recibe body:** la cantidad y el rol van como
+        parámetros de query. Sin `role`, cada usuario sale al azar entre `USER` y `COURIER`.
+        Deshabilitado con `NODE_ENV=production`.
+      operationId: seedUsers
+      parameters:
+        - $ref: '#/components/parameters/MockQty'
+        - $ref: '#/components/parameters/MockRole'
+      responses:
+        '201':
+          description: Usuarios insertados.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/SeedUsersResult'
+        '400':
+          $ref: '#/components/responses/MockQuantityOrRoleInvalid'
+        '403':
+          $ref: '#/components/responses/MockSeedForbidden'
+        '500':
+          $ref: '#/components/responses/MockSeedError'
+
+  /api/mocks/seed/couriers:
+    post:
+      tags: [Mocks]
+      summary: Carga repartidores de prueba
+      description: >-
+        Inserta en MongoDB `qty` usuarios simulados con rol `COURIER`. **No recibe body:** la cantidad va
+        como parámetro de query. Deshabilitado con `NODE_ENV=production`.
+      operationId: seedCouriers
+      parameters:
+        - $ref: '#/components/parameters/MockQty'
+      responses:
+        '201':
+          description: Repartidores insertados.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/SeedCouriersResult'
+        '400':
+          $ref: '#/components/responses/MockQuantityInvalid'
+        '403':
+          $ref: '#/components/responses/MockSeedForbidden'
+        '500':
+          $ref: '#/components/responses/MockSeedError'
+
+  /api/mocks/seed/orders:
+    post:
+      tags: [Mocks]
+      summary: Carga pedidos de prueba con sus entregas
+      description: >-
+        Inserta en MongoDB `qty` pedidos, cada uno con su entrega, para los clientes y repartidores de prueba
+        que ya estén en la base (nunca usa usuarios reales). Hay que cargarlos antes con
+        `POST /api/mocks/seed/users` y `POST /api/mocks/seed/couriers`. **No recibe body:** la cantidad va
+        como parámetro de query. Deshabilitado con `NODE_ENV=production`.
+      operationId: seedOrders
+      parameters:
+        - $ref: '#/components/parameters/MockQty'
+      responses:
+        '201':
+          description: Pedidos y entregas insertados.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/SeedOrdersResult'
+        '400':
+          $ref: '#/components/responses/MockQuantityInvalid'
+        '403':
+          $ref: '#/components/responses/MockSeedForbidden'
+        '409':
+          description: No hay clientes y repartidores de prueba cargados en la base.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                RequirementsNotMet:
+                  $ref: '#/components/examples/MockSeedRequirementsNotMet'
+        '500':
+          $ref: '#/components/responses/MockSeedError'

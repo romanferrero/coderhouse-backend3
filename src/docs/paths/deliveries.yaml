@@ -1,0 +1,75 @@
+paths:
+  /api/deliveries:
+    get:
+      tags: [Deliveries]
+      summary: Lista entregas
+      description: >-
+        Lista paginada de entregas, de la más nueva a la más vieja, con los datos principales del pedido
+        y del repartidor. Se puede filtrar por estado.
+      operationId: getDeliveries
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          required: false
+          description: >-
+            Filtra por estado: `WAITING_COURIER`, `ASSIGNED`, `IN_TRANSIT`, `DELIVERED` o `CANCELLED`
+            (acepta minúsculas). Otro valor → `INVALID_STATUS`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Página de entregas.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        allOf:
+                          - $ref: '#/components/schemas/PaginatedResult'
+                          - type: object
+                            properties:
+                              docs:
+                                type: array
+                                items:
+                                  $ref: '#/components/schemas/Delivery'
+        '400':
+          description: Estado inválido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                InvalidStatus:
+                  $ref: '#/components/examples/DeliveryStatusInvalid'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/deliveries/{did}:
+    get:
+      tags: [Deliveries]
+      summary: Obtiene una entrega
+      description: Devuelve la entrega con los datos principales del pedido y del repartidor.
+      operationId: getDeliveryById
+      parameters:
+        - $ref: '#/components/parameters/DeliveryId'
+      responses:
+        '200':
+          description: Entrega encontrada.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/Delivery'
+        '404':
+          $ref: '#/components/responses/DeliveryNotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
