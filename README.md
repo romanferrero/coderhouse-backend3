@@ -1,10 +1,11 @@
 # ShipNow API
 
-API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y repartidores), **pedidos** y **entregas**, con arquitectura por capas (**Router → Controller → Service → Repository → Model**), configuración de entorno centralizada, un **módulo de mocking** para generar y cargar datos de prueba, una **capa centralizada de manejo de errores** y **logging con Winston**.
+API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y repartidores), **pedidos** y **entregas**, con arquitectura por capas (**Router → Controller → Service → Repository → Model**), configuración de entorno centralizada, un **módulo de mocking** para generar y cargar datos de prueba, una **capa centralizada de manejo de errores**, **logging con Winston** y **documentación interactiva con Swagger**.
 
-> Pre-entregas Módulo 1 (arquitectura por capas), Módulo 2 (mocking y carga de datos), Módulo 3 (manejo profesional de errores) y Módulo 4 (logging y monitoreo básico) — Backend III (Coderhouse).
+> Pre-entregas Módulo 1 (arquitectura por capas), Módulo 2 (mocking y carga de datos), Módulo 3 (manejo profesional de errores), Módulo 4 (logging y monitoreo básico) y Módulo 5 (documentación de API con Swagger) — Backend III (Coderhouse).
 
 - [Cómo correrlo localmente](#cómo-correrlo-localmente)
+- [Documentación de la API (Swagger)](#documentación-de-la-api-swagger)
 - [Manejo de errores](#manejo-de-errores)
 - [Logging](#logging)
 - [Módulo de mocking — `/api/mocks`](#módulo-de-mocking--apimocks)
@@ -20,6 +21,7 @@ API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y 
 - bcryptjs (hash de contraseñas)
 - @faker-js/faker (datos simulados, locale español)
 - winston + winston-daily-rotate-file (logging con rotación de archivos)
+- swagger-jsdoc + swagger-ui-express (documentación OpenAPI 3 interactiva)
 
 ## Cómo correrlo localmente
 
@@ -52,6 +54,8 @@ API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y 
 
    Verificar con `GET http://localhost:8080/api/health`.
 
+4. **Abrir la documentación**: [http://localhost:8080/api/docs](http://localhost:8080/api/docs) (ver [Documentación de la API](#documentación-de-la-api-swagger)).
+
 ### Si falta una variable
 
 La app **no arranca** si falta o es inválida alguna variable crítica, y lo registra como `fatal` (consola y `logs/error.log`). Por ejemplo, con `MONGODB_URI` vacía:
@@ -78,9 +82,10 @@ src/
 ├── errors/                # diccionario de errores, AppError y errores personalizados del dominio
 ├── middlewares/           # errorHandler (único lugar que arma respuestas de error) y requestLogger
 ├── logger/                # configuración única de Winston (niveles, formato, transports, rotación)
+├── docs/                  # documentación OpenAPI: configuración de Swagger, paths y components en YAML
 ├── db/                    # conexión a MongoDB
 ├── utils/                 # paginación, helpers
-├── app.js                 # instancia de Express
+├── app.js                 # instancia de Express (monta /api/docs y /api)
 └── server.js              # punto de entrada: conecta la DB y levanta el servidor
 logs/                      # archivos de log generados (ignorados por Git, salvo .gitkeep)
 ```
@@ -99,6 +104,74 @@ HTTP → Router → Controller → Service → Repository → Model (Mongoose) �
 - Los Services rechazan con `400` los campos obligatorios vacíos o con solo espacios, tanto al crear como al actualizar (PUT).
 - Los campos de texto tienen que llegar como string: un array u objeto (`{"email": ["ana@mail.com"]}`, `{"code": {"$ne": null}}`) responde `400 INVALID_FIELD_TYPE` antes de validar el formato o de consultar MongoDB.
 - `process.env` solo se lee en `src/config/env.config.js`.
+
+## Documentación de la API (Swagger)
+
+La API se documenta con **OpenAPI 3** y se puede consultar y probar desde el navegador con Swagger UI.
+
+| Ruta                                   | Qué devuelve |
+| -------------------------------------- | ------------ |
+| **`GET /api/docs`**                    | Swagger UI: documentación interactiva, con "Try it out" para ejecutar cada endpoint |
+| `GET /api/docs.json`                   | La especificación OpenAPI en JSON (para importarla en Postman, Insomnia, etc.) |
+
+Con el servidor levantado (`npm run dev`, ver [Cómo correrlo localmente](#cómo-correrlo-localmente)), abrir **[http://localhost:8080/api/docs](http://localhost:8080/api/docs)**. Si en `.env` se usa otro `PORT`, la ruta es la misma con ese puerto: el servidor que figura en la documentación se arma con el puerto configurado.
+
+### Qué está documentado
+
+La información general (nombre, versión tomada del `package.json`, descripción, propósito y servidor local) está al principio de la página. Los endpoints están agrupados por **tags**:
+
+| Tag          | Endpoints | Notas |
+| ------------ | --------- | ----- |
+| `Users`      | `GET/POST /api/users`, `GET/PUT/DELETE /api/users/{uid}`, `PATCH /api/users/{uid}/role` | Alta, edición, cambio de rol y baja |
+| `Orders`     | `GET /api/orders`, `GET /api/orders/{oid}` | Solo lectura, filtros por estado y prioridad |
+| `Deliveries` | `GET /api/deliveries`, `GET /api/deliveries/{did}` | Solo lectura, filtro por estado |
+| `Mocks`      | `GET /api/mocks/{users,couriers,orders,deliveries}`, `POST /api/mocks/seed`, `POST /api/mocks/seed/{users,couriers,orders}`, `DELETE /api/mocks/seed` | Separa lo que solo genera datos (GET) de lo que escribe en MongoDB (POST/DELETE) |
+| `Logger`     | `GET /api/loggerTest` | Aclarado como herramienta de validación, no funcionalidad de negocio |
+| `Products`   | `GET/POST /api/products`, `GET/PUT/DELETE /api/products/{pid}` | Catálogo |
+| `Health`     | `GET /api/health` | Estado del servidor |
+
+Cada endpoint indica método, ruta, descripción, parámetros de ruta y de query, body esperado (si lleva), la respuesta exitosa con su schema y **todas las respuestas de error que puede devolver**, con un ejemplo por cada `code` posible (por ejemplo, el `400` de `POST /api/users` muestra `MISSING_REQUIRED_FIELDS`, `INVALID_FIELD_TYPE`, los tres `VALIDATION_ERROR` e `INVALID_JSON`).
+
+**Schemas reutilizables** (`components/schemas`): `User`, `Order`, `OrderItem`, `Delivery`, `Product`, `SuccessResponse`, `ErrorResponse` (con el enum `ErrorCode` del diccionario), `PaginatedResult`, los bodies de entrada (`UserCreate`, `UserUpdate`, `UserRoleChange`, `ProductCreate`, `ProductUpdate`), los datos simulados (`MockUser`, `MockOrder`, `MockDelivery`…) y los resultados de la carga de mocks y del logger. Además hay **parámetros**, **respuestas de error** (`UserNotFound`, `MockSeedForbidden`, `InternalServerError`…) y **ejemplos de error** reutilizables.
+
+Los errores documentados son los del [diccionario de errores](#diccionario-de-errores), con el mismo `code`, status, `message` y `details` que devuelve la API: datos inválidos (`400`), recurso no encontrado (`404`), conflictos (`409`), cantidad inválida en mocks (`MOCK_INVALID_QUANTITY`, `MOCK_NEGATIVE_QUANTITY`, `MOCK_QUANTITY_OUT_OF_RANGE`), estado inválido en pedidos y entregas (`INVALID_STATUS`), carga deshabilitada en producción (`403`) y error interno (`500`). La API **no tiene autenticación**, así que no hay respuestas `401`.
+
+### Cómo está organizado
+
+La configuración de Swagger está separada de las rutas: los routers no tienen comentarios ni código de Swagger.
+
+```
+src/docs/
+├── swagger.js               # configuración: info general, servidor, tags y armado de la spec con swagger-jsdoc
+├── components/
+│   ├── schemas.yaml         # entidades, bodies de entrada, SuccessResponse, ErrorResponse, PaginatedResult
+│   ├── parameters.yaml      # uid, oid, did, pid, page, limit, qty, role
+│   ├── responses.yaml       # respuestas de error reutilizables (404, 403, 413, 500, cantidades inválidas…)
+│   └── examples.yaml        # un ejemplo por cada error, con el mismo code, message y details de la API
+└── paths/                   # un archivo por módulo
+    ├── users.yaml   orders.yaml   deliveries.yaml   mocks.yaml
+    └── logger.yaml  products.yaml health.yaml
+```
+
+`app.js` solo monta el resultado:
+
+```js
+app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions));
+```
+
+`swagger.js` usa `failOnErrors: true`, así que un YAML mal escrito frena el arranque con un error que indica el archivo y la línea, en lugar de publicar una documentación incompleta.
+
+### Aclaraciones para probar los endpoints desde Swagger
+
+- **Orden sugerido**: primero `POST /api/mocks/seed` (tag `Mocks`) para tener datos; después `GET /api/orders` o `GET /api/deliveries` y copiar un `_id` para probar los endpoints `/{oid}` y `/{did}`. Al terminar, `DELETE /api/mocks/seed` borra solo los datos de prueba.
+- Los endpoints de carga de mocks **no reciben body**: las cantidades van como parámetros de query (`qty`, o `users`, `couriers` y `orders` en `/seed`), cada una entre 1 y 100.
+- La escritura de mocks (`POST`/`DELETE /api/mocks/seed…`) responde `403 MOCK_SEED_FORBIDDEN` con `NODE_ENV=production`. Para probarla, levantar el servidor con `NODE_ENV=development`.
+- Swagger UI valida en el navegador que los parámetros numéricos sean enteros, así que no deja enviar `qty=abc` o `qty=2.5`. Para ver `MOCK_INVALID_QUANTITY` se puede usar `curl` (ver [Cómo probar los casos inválidos](#cómo-probar-los-casos-inválidos)); los negativos (`-5`) y fuera de rango (`0`, `1000`) sí se pueden probar desde Swagger.
+- Los filtros de estado, prioridad y rol son texto libre (aceptan minúsculas), así que también se pueden probar valores inválidos como `status=volando`.
+- Un id con formato inválido (por ejemplo `123`) responde `404`, igual que uno inexistente.
+- `DELETE /api/users/{uid}` y `DELETE /api/products/{pid}` responden `204` sin body.
+- Fuera de producción, los errores con causa técnica (`500`, `INVALID_JSON`) agregan `details.cause`; en producción `details` no la incluye.
 
 ## Manejo de errores
 
@@ -591,6 +664,8 @@ Roles válidos: `ADMIN`, `USER` (cliente) y `COURIER` (repartidor).
 | ------ | ----------------- | ----------- |
 | GET    | `/api/health`     | Verifica que el servidor responde |
 | GET    | `/api/loggerTest` | Genera un log de cada nivel (ver [Endpoint de prueba](#endpoint-de-prueba--get-apiloggertest)) |
+| GET    | `/api/docs`       | Documentación interactiva con Swagger UI (ver [Documentación de la API](#documentación-de-la-api-swagger)) |
+| GET    | `/api/docs.json`  | Especificación OpenAPI en JSON |
 
 Ejemplo:
 
