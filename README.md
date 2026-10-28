@@ -1,8 +1,8 @@
 # ShipNow API
 
-API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y repartidores), **pedidos** y **entregas**, con arquitectura por capas (**Router → Controller → Service → Repository → Model**), configuración de entorno centralizada, un **módulo de mocking** para generar y cargar datos de prueba, una **capa centralizada de manejo de errores**, **logging con Winston** y **documentación interactiva con Swagger**.
+API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y repartidores), **pedidos** y **entregas**, con arquitectura por capas (**Router → Controller → Service → Repository → Model**), configuración de entorno centralizada, un **módulo de mocking** para generar y cargar datos de prueba, una **capa centralizada de manejo de errores**, **logging con Winston**, **documentación interactiva con Swagger** y una **suite de tests funcionales** con Mocha, Chai y Supertest.
 
-> Pre-entregas Módulo 1 (arquitectura por capas), Módulo 2 (mocking y carga de datos), Módulo 3 (manejo profesional de errores), Módulo 4 (logging y monitoreo básico) y Módulo 5 (documentación de API con Swagger) — Backend III (Coderhouse).
+> Pre-entregas Módulo 1 (arquitectura por capas), Módulo 2 (mocking y carga de datos), Módulo 3 (manejo profesional de errores), Módulo 4 (logging y monitoreo básico), Módulo 5 (documentación de API con Swagger) y Módulo 6 (testing funcional con Mocha, Chai y Supertest) — Backend III (Coderhouse).
 
 - [Cómo correrlo localmente](#cómo-correrlo-localmente)
 - [Documentación de la API (Swagger)](#documentación-de-la-api-swagger)
@@ -10,6 +10,7 @@ API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y 
 - [Logging](#logging)
 - [Módulo de mocking — `/api/mocks`](#módulo-de-mocking--apimocks)
 - [Endpoints](#endpoints)
+- [Testing](#testing)
 - [Constantes](#constantes)
 
 ## Stack
@@ -22,6 +23,7 @@ API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y 
 - @faker-js/faker (datos simulados, locale español)
 - winston + winston-daily-rotate-file (logging con rotación de archivos)
 - swagger-jsdoc + swagger-ui-express (documentación OpenAPI 3 interactiva)
+- Mocha + Chai + Supertest (tests funcionales, solo en desarrollo)
 
 ## Cómo correrlo localmente
 
@@ -85,8 +87,9 @@ src/
 ├── docs/                  # documentación OpenAPI: configuración de Swagger, paths y components en YAML
 ├── db/                    # conexión a MongoDB
 ├── utils/                 # paginación, helpers
-├── app.js                 # instancia de Express (monta /api/docs y /api)
+├── app.js                 # instancia de Express (monta /api/docs y /api); no abre ningún puerto
 └── server.js              # punto de entrada: conecta la DB y levanta el servidor
+tests/                     # tests funcionales (ver Testing)
 logs/                      # archivos de log generados (ignorados por Git, salvo .gitkeep)
 ```
 
@@ -394,7 +397,7 @@ El nivel mínimo sale de `NODE_ENV` (la misma variable de entorno del Módulo 1)
 | ------------- | ------------ | --------- |
 | `development` | `debug`      | Todo, con colores en consola |
 | `production`  | `info`       | `info`, `warning`, `error` y `fatal`, sin colores |
-| `test`        | `warning`    | Solo advertencias y errores, para no ensuciar la salida de los tests |
+| `test`        | `warning`    | Solo advertencias y errores, y únicamente en los archivos: la consola queda en silencio para no mezclar los logs con la salida de Mocha |
 
 Además, en producción la respuesta de error nunca incluye `details.cause`: el detalle técnico queda solo en los logs.
 
@@ -687,6 +690,141 @@ Ejemplo:
 curl -X POST http://localhost:8080/api/products \
   -H "Content-Type: application/json" \
   -d '{"title":"Caja chica","code":"BOX-S","price":1500,"stock":10,"category":"embalaje"}'
+```
+
+## Testing
+
+Suite de **tests funcionales** que prueba la API de punta a punta: cada test hace una request HTTP real a la app de Express y valida el status, la estructura del body y los datos importantes de la respuesta, tanto en los casos exitosos como en los errores esperados.
+
+### Herramientas
+
+| Herramienta | Para qué se usa |
+| ----------- | --------------- |
+| **[Mocha](https://mochajs.org/)** | Organiza y ejecuta los tests (`describe` / `it`) y los hooks de preparación y limpieza (`before`, `beforeEach`, `after`) |
+| **[Chai](https://www.chaijs.com/)** | Validaciones con `expect` (status, claves del body, valores) |
+| **[Supertest](https://github.com/ladjs/supertest)** | Hace las requests HTTP contra la app de Express sin levantar el servidor a mano |
+
+Las tres están en `devDependencies`: no se instalan en producción.
+
+### Cómo ejecutar los tests
+
+1. Tener MongoDB corriendo (el mismo servidor local de desarrollo sirve: los tests usan **otra base**).
+2. Crear el archivo de entorno de testing a partir del ejemplo:
+
+   ```bash
+   cp .env.test.example .env.test
+   ```
+
+3. Correr la suite:
+
+   ```bash
+   npm test
+   ```
+
+```
+  Pedidos — /api/orders
+    POST /api/orders
+      ✔ crea el pedido en PENDING con código y total calculados por la API
+      ✔ 400 MISSING_REQUIRED_FIELDS si faltan los datos obligatorios
+      ✔ 404 USER_NOT_FOUND si el cliente no existe
+    PATCH /api/orders/:oid/status
+      ✔ 409 ORDER_STATUS_TRANSITION_NOT_ALLOWED si salta estados
+  ...
+  115 passing (2s)
+```
+
+Para correr una parte: `npm test -- --grep "POST /api/orders"` filtra por el nombre del `describe` o del `it`.
+
+### Entorno de testing separado
+
+|                      | Desarrollo (`npm run dev`) | Testing (`npm test`) |
+| -------------------- | -------------------------- | -------------------- |
+| Archivo de variables | `.env`                     | `.env.test` |
+| `NODE_ENV`           | `development`              | `test` (lo fija `tests/setup.js`) |
+| Base de datos        | `shipnow`                  | `shipnow_test` (**se vacía en cada test**) |
+| Logs                 | consola + `logs/`          | solo `logs/` (la consola queda en silencio) |
+
+**Variables de entorno necesarias** (en `.env.test`, ver `.env.test.example`):
+
+| Variable      | Valor de ejemplo                         | Notas |
+| ------------- | ---------------------------------------- | ----- |
+| `MONGODB_URI` | `mongodb://localhost:27017/shipnow_test` | **Base de testing obligatoria**: el nombre tiene que contener `test` |
+| `NODE_ENV`    | `test`                                   | Igual se fuerza a `test` desde `tests/setup.js` |
+| `PORT`        | `8081`                                   | Solo se usa para la URL que muestra Swagger: los tests no abren este puerto |
+
+Cómo se separa:
+
+- `src/config/env.config.js` lee `.env.test` cuando `NODE_ENV=test` y `.env` en cualquier otro caso: las variables de desarrollo nunca llegan a los tests.
+- `tests/setup.js` se carga antes que cualquier test (`.mocharc.json`), fija `NODE_ENV=test`, conecta a MongoDB y **corta la ejecución si la base no es de testing** (si su nombre no contiene `test`), antes de borrar nada. Así un `.env.test` mal configurado nunca vacía la base de desarrollo.
+- `.env.test` está en `.gitignore`; se versiona solo `.env.test.example`.
+
+### La app separada del servidor
+
+`src/app.js` crea y configura Express y lo exporta, sin llamar a `listen`. `src/server.js` es el único que conecta a MongoDB y abre el puerto. Los tests importan solo la app:
+
+```js
+// tests/helpers/api.js
+import request from 'supertest';
+import app from '../../src/app.js';
+
+export const api = request(app); // Supertest la levanta en un puerto temporal para cada request
+```
+
+### Qué está cubierto
+
+115 tests, con al menos un caso exitoso y uno de error por endpoint:
+
+| Archivo | Endpoints | Casos exitosos | Errores validados |
+| ------- | --------- | -------------- | ----------------- |
+| `users.test.js` | `GET/POST /api/users`, `GET/PUT/DELETE /api/users/:uid`, `PATCH /api/users/:uid/role` | listado paginado sin contraseñas, filtro por rol, alta (rol `USER`, contraseña hasheada), edición, cambio de rol, baja | `INVALID_ROLE`, `USER_NOT_FOUND` (inexistente y formato inválido), `MISSING_REQUIRED_FIELDS`, `INVALID_FIELD_TYPE`, `VALIDATION_ERROR` (email, contraseña, edad), `USER_EMAIL_ALREADY_REGISTERED`, `PAYLOAD_TOO_LARGE`, `NO_FIELDS_TO_UPDATE`, `BLANK_REQUIRED_FIELDS`, `LAST_ADMIN_REQUIRED` |
+| `orders.test.js` | `GET/POST /api/orders`, `GET /api/orders/:oid`, `PATCH /api/orders/:oid/status` | listado con cliente populado, filtros, paginación, alta con código y total calculados, consulta del pedido creado, cancelación, avance de estado que actualiza la entrega | `INVALID_STATUS`, `INVALID_PRIORITY`, `ORDER_NOT_FOUND`, `MISSING_REQUIRED_FIELDS` (body vacío y dirección incompleta), `VALIDATION_ERROR` (sin ítems, cantidad, precio, cliente que no es `USER`), `INVALID_FIELD_TYPE`, `USER_NOT_FOUND`, `INVALID_JSON`, `ORDER_STATUS_TRANSITION_NOT_ALLOWED`, `ORDER_COURIER_REQUIRED` |
+| `deliveries.test.js` | `GET /api/deliveries`, `GET /api/deliveries/:did` | listado con pedido y repartidor populados, filtro por estado | `INVALID_STATUS`, `DELIVERY_NOT_FOUND` |
+| `products.test.js` | `GET/POST /api/products`, `GET/PUT/DELETE /api/products/:pid` | catálogo, alta con estado derivado del stock, edición, baja lógica | `INVALID_STATUS`, `PRODUCT_NOT_FOUND`, `MISSING_REQUIRED_FIELDS`, `INVALID_FIELD_TYPE`, `VALIDATION_ERROR`, `PRODUCT_CODE_ALREADY_EXISTS`, `NO_FIELDS_TO_UPDATE` |
+| `mocks.test.js` | `GET /api/mocks/{users,couriers,orders,deliveries}`, `POST /api/mocks/seed`, `POST /api/mocks/seed/{users,couriers,orders}`, `DELETE /api/mocks/seed` | generación con la cantidad y el rol pedidos (sin escribir en la base), relaciones entre pedidos, clientes, entregas y repartidores, carga en MongoDB, limpieza que conserva los datos reales | `MOCK_INVALID_QUANTITY` (texto, decimal, repetido), `MOCK_NEGATIVE_QUANTITY`, `MOCK_QUANTITY_OUT_OF_RANGE` (0 y 1000), `INVALID_ROLE`, `MOCK_SEED_REQUIREMENTS_NOT_MET` |
+| `logger.test.js` | `GET /api/loggerTest` | niveles registrados y omitidos con `NODE_ENV=test` | `ROUTE_NOT_FOUND` (método inexistente) |
+| `docs.test.js` | `GET /api/docs/`, `GET /api/docs.json` | Swagger UI responde HTML; la spec tiene versión, tags y los endpoints principales | `ROUTE_NOT_FOUND` (método inexistente) |
+| `app.test.js` | `GET /api/health`, rutas inexistentes | health check | `ROUTE_NOT_FOUND` (dentro y fuera de `/api`), `BAD_REQUEST` (URL mal codificada) |
+
+**Qué valida cada test.** No alcanza con que el endpoint responda:
+
+- Éxito: status, `{ status: 'success', payload }` y las propiedades del payload (claves del recurso, valores calculados como el `total` o el `code`, que un usuario nunca traiga `password`, la estructura de la paginación…).
+- Error: status, el formato del módulo de errores `{ status: 'error', code, message, details }`, el `code` interno y el contenido de `details` (campos faltantes, valor recibido, valores permitidos…). El helper `expectError` además comprueba que el status coincida con el que define el **diccionario de errores** para ese `code`.
+
+**Coherencia con Swagger** (`docs.test.js`), comprobada automáticamente a partir de la spec:
+
+- El enum `ErrorCode` documentado tiene exactamente los códigos del diccionario de errores.
+- Cada ejemplo de error documentado usa el status HTTP que el diccionario le asigna a su `code` (por ejemplo, que `ORDER_NOT_FOUND` figure como `404`).
+- **Cada endpoint documentado existe y responde uno de los status que figuran en su documentación** (por ejemplo, `GET /api/orders/{oid}` con un id inexistente responde `404`, como dice Swagger).
+
+**Lo que no se cubre**, porque depende de condiciones que no se reproducen con la app en modo test: los `500` por caída de MongoDB (`INTERNAL_SERVER_ERROR`, `MOCK_SEED_FAILED`, `MOCK_CLEAR_FAILED`, `MOCK_GENERATION_FAILED`) y el `403 MOCK_SEED_FORBIDDEN`, que solo ocurre con `NODE_ENV=production`.
+
+### Datos de prueba y limpieza
+
+- **Datos controlados**: ningún test depende de datos cargados a mano. Cada test crea lo que necesita con los helpers de `tests/helpers/fixtures.js` (por ejemplo, un cliente válido antes de crear un pedido), que usan los generadores del módulo de mocks: todos los usuarios tienen email `@shipnow.test`.
+- **Repetibles**: Faker usa una semilla fija (`tests/setup.js`), así que los datos generados son los mismos en cada corrida.
+- **Limpieza**: cada grupo vacía la base de testing en un `beforeEach` (cada test arranca de cero) y de nuevo en el `after` del grupo; `tests/setup.js` también la vacía al empezar y al terminar la suite. Se usa `deleteMany` sobre cada colección para conservar los índices (como el de email único).
+- **Independientes del orden**: como cada test prepara sus propios datos sobre una base vacía, la suite pasa igual corrida dos veces seguidas, en otro orden o archivo por archivo.
+
+### Organización
+
+```
+.mocharc.json             # carga tests/setup.js, busca tests/**/*.test.js, timeout de 10 s
+.env.test.example         # variables del entorno de testing
+tests/
+├── setup.js              # hooks globales: NODE_ENV=test, conexión, control de la base, limpieza
+├── helpers/
+│   ├── api.js            # Supertest sobre la app de Express
+│   ├── assertions.js     # expectSuccess, expectError, expectPaginated, expectPublicUser
+│   ├── db.js             # clearDatabase
+│   └── fixtures.js       # datos de prueba (clientes, repartidores, pedidos, entregas, productos)
+├── users.test.js         # un archivo por recurso o módulo
+├── orders.test.js
+├── deliveries.test.js
+├── products.test.js
+├── mocks.test.js
+├── logger.test.js
+├── docs.test.js          # Swagger y coherencia con la API
+└── app.test.js           # health y rutas inexistentes
 ```
 
 ## ¿Por qué separar así Service y Repository?

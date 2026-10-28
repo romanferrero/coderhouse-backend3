@@ -1,6 +1,10 @@
 import dotenv from 'dotenv';
 
-dotenv.config({ quiet: true });
+// Los tests corren con NODE_ENV=test (lo fija tests/setup.js) y leen su propio archivo, .env.test,
+// con una base de datos separada. Nunca se mezcla con el .env de desarrollo.
+const ENV_FILE = process.env.NODE_ENV === 'test' ? '.env.test' : '.env';
+
+dotenv.config({ path: ENV_FILE, quiet: true });
 
 const REQUIRED_VARS = ['PORT', 'MONGODB_URI', 'NODE_ENV'];
 const VALID_ENVIRONMENTS = ['development', 'production', 'test'];
@@ -10,7 +14,7 @@ const validateEnv = (env) => {
   if (missing.length > 0) {
     throw new Error(
       `[config] Faltan variables de entorno obligatorias: ${missing.join(', ')}. ` +
-        'Revisá tu archivo .env (podés tomar .env.example como referencia).'
+        `Revisá tu archivo ${ENV_FILE} (podés tomar ${ENV_FILE}.example como referencia).`
     );
   }
 

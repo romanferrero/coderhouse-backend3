@@ -72,7 +72,9 @@ const logger = winston.createLogger({
   format: baseFormat,
   transports: [
     // Colores solo en desarrollo: en producción la consola suele ir a un archivo o a un servicio.
+    // En test la consola queda en silencio para no mezclar los logs con la salida de Mocha.
     new winston.transports.Console({
+      silent: ENVIRONMENT === 'test',
       format: lineFormat({ colors: ENVIRONMENT === 'development' }),
     }),
     // Solo error y fatal, para consultar las fallas después de que ocurrieron.
