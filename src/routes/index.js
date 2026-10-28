@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import healthRouter from './health.router.js';
 import productsRouter from './products.router.js';
 import usersRouter from './users.router.js';
 import ordersRouter from './orders.router.js';
@@ -8,7 +9,7 @@ import loggerRouter from './logger.router.js';
 
 const router = Router();
 
-router.get('/health', (req, res) => res.json({ status: 'ok' }));
+router.use('/health', healthRouter);
 router.use('/products', productsRouter);
 router.use('/users', usersRouter);
 router.use('/orders', ordersRouter);
