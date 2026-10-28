@@ -113,18 +113,21 @@ class MockService {
 
   // ---------- Armado de datos (sin tocar la base) ----------
 
-  // Todos los usuarios simulados comparten la contraseña MOCKS.PASSWORD, ya hasheada.
+  // Los usuarios simulados salen sin contraseña: los GET no la devuelven.
   async buildUsers(qty, role) {
-    return this.generate(async () => {
-      const passwordHash = await this.hashPassword(MOCKS.PASSWORD);
-      return generateUsers(qty, { role, passwordHash });
-    });
+    return this.generate(() => generateUsers(qty, { role }));
   }
 
   async buildCouriers(qty) {
+    return this.generate(() => generateCouriers(qty));
+  }
+
+  // Solo los seed guardan usuarios: recién ahí se agrega la contraseña MOCKS.PASSWORD hasheada,
+  // que el modelo exige. El hash se calcula una vez y lo comparten todos.
+  async withPassword(users) {
     return this.generate(async () => {
-      const passwordHash = await this.hashPassword(MOCKS.PASSWORD);
-      return generateCouriers(qty, { passwordHash });
+      const password = await this.hashPassword(MOCKS.PASSWORD);
+      return users.map((user) => ({ ...user, password }));
     });
   }
 
@@ -181,7 +184,7 @@ class MockService {
 
   async seedUsers({ qty, role } = {}) {
     this.ensureSeedAllowed();
-    const users = await this.buildUsers(this.parseQty(qty), this.parseRole(role));
+    const users = await this.withPassword(await this.buildUsers(this.parseQty(qty), this.parseRole(role)));
     const inserted = await this.runSeedStep('users', () => this.userRepository.createMany(users), {
       userIds: toCollectionIds(users),
     });
@@ -191,7 +194,7 @@ class MockService {
 
   async seedCouriers({ qty } = {}) {
     this.ensureSeedAllowed();
-    const couriers = await this.buildCouriers(this.parseQty(qty));
+    const couriers = await this.withPassword(await this.buildCouriers(this.parseQty(qty)));
     const inserted = await this.runSeedStep('users', () => this.userRepository.createMany(couriers), {
       userIds: toCollectionIds(couriers),
     });
@@ -240,8 +243,8 @@ class MockService {
     const couriersQty = this.parseQty(couriers, { name: 'couriers', fallback: MOCKS.DATASET.COURIERS });
     const ordersQty = this.parseQty(orders, { name: 'orders', fallback: MOCKS.DATASET.ORDERS });
 
-    const customers = await this.buildUsers(usersQty, USER_ROLES.USER);
-    const courierDocs = await this.buildCouriers(couriersQty);
+    const customers = await this.withPassword(await this.buildUsers(usersQty, USER_ROLES.USER));
+    const courierDocs = await this.withPassword(await this.buildCouriers(couriersQty));
     const { orders: orderDocs, deliveries } = await this.buildOrdersWithDeliveries(ordersQty, {
       customerIds: toCollectionIds(customers),
       courierIds: toCollectionIds(courierDocs),

@@ -7,7 +7,7 @@ paths:
       tags: [Mocks]
       summary: Genera usuarios simulados (no se guardan)
       description: >-
-        Devuelve usuarios generados con Faker, con la misma forma que el modelo. **No escribe en la base.**
+        Devuelve usuarios generados con Faker, con la forma del modelo y sin contraseña. **No escribe en la base.**
         Sin `role`, cada usuario sale al azar entre `USER` y `COURIER`.
       operationId: getMockUsers
       parameters:

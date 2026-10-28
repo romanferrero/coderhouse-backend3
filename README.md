@@ -518,7 +518,6 @@ curl "http://localhost:8080/api/mocks/users?qty=2"
       "last_name": "Miramontes Jaimes",
       "email": "mario.miramontesjaimes.9ab0a@shipnow.test",
       "age": 53,
-      "password": "$2b$10$XveIH873FWn2sSJr/GF70up//qpIot3m4DngGHM/Rqf3qG5BBmkje",
       "role": "USER"
     },
     {
@@ -527,7 +526,6 @@ curl "http://localhost:8080/api/mocks/users?qty=2"
       "last_name": "Galarza Báez",
       "email": "alejandra.galarzabaez.4hi9o@shipnow.test",
       "age": 27,
-      "password": "$2b$10$T5djR3ukyS44bJaeo6umEeW6zuXqQqHIe9qtHI72vg4JzldG5O4.e",
       "role": "COURIER"
     }
   ]
@@ -577,7 +575,7 @@ curl "http://localhost:8080/api/deliveries?status=IN_TRANSIT" # trae pedido y re
 curl -X DELETE "http://localhost:8080/api/mocks/seed"
 ```
 
-Todos los usuarios generados tienen la contraseña `coder123`, guardada hasheada con bcrypt.
+Los usuarios que se cargan en la base tienen la contraseña `coder123`, guardada hasheada con bcrypt. El hash se genera solo en la carga (`POST /api/mocks/seed…`): los `GET` de mocks devuelven los usuarios sin contraseña.
 
 ### Carga controlada
 
@@ -592,7 +590,7 @@ Todos los usuarios generados tienen la contraseña `coder123`, guardada hasheada
 
 | Entidad    | Reglas |
 | ---------- | ------ |
-| Usuario    | Misma forma que `UserModel` (`first_name`, `last_name`, `email`, `age`, `password`, `role`). El rol siempre sale de `USER_ROLES`. |
+| Usuario    | Misma forma que `UserModel` (`first_name`, `last_name`, `email`, `age`, `role`). El `password` (hash de `coder123`) se agrega solo al insertarlos con los seed. El rol siempre sale de `USER_ROLES`. |
 | Repartidor | Es un usuario con rol `USER_ROLES.COURIER`. |
 | Pedido     | `customer` referencia a un usuario `USER`. `status` sale de `ORDER_STATUS` y `priority` de `ORDER_PRIORITY`. El `total` se calcula a partir de los ítems. `createdAt` cae en los últimos 30 días. |
 | Entrega    | Una por pedido (`order` es único). El `status` **no es aleatorio**: se deriva del estado del pedido con `DELIVERY_STATUS_BY_ORDER_STATUS`. Lleva `courier` solo si el estado está en `DELIVERY_STATUSES_WITH_COURIER` (el esquema también lo exige). Las fechas nunca son anteriores a la creación del pedido: la entrega se crea junto con él (`createdAt` igual), `estimatedAt` se calcula desde esa fecha según la prioridad y `deliveredAt` (solo si fue entregada) cae entre la creación del pedido y hoy. |

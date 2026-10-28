@@ -12,9 +12,10 @@ const toEmailPart = (text) =>
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '');
 
-// Genera un usuario con la misma forma que UserModel. El _id se genera acá
+// Genera un usuario con la forma de UserModel, sin contraseña: solo la llevan los que se
+// guardan en la base (la agrega mock.service.js en los seed). El _id se genera acá
 // para poder relacionarlo con pedidos y entregas antes de guardarlo.
-export const generateUser = ({ role = faker.helpers.arrayElement(MOCKS.RANDOM_ROLES), passwordHash }) => {
+export const generateUser = ({ role = faker.helpers.arrayElement(MOCKS.RANDOM_ROLES) } = {}) => {
   const firstName = faker.person.firstName();
   const lastName = faker.person.lastName();
   // El sufijo aleatorio evita choques con el índice único de email.
@@ -26,12 +27,10 @@ export const generateUser = ({ role = faker.helpers.arrayElement(MOCKS.RANDOM_RO
     last_name: lastName,
     email: `${toEmailPart(firstName)}.${toEmailPart(lastName)}.${suffix}@${MOCKS.EMAIL_DOMAIN}`,
     age: faker.number.int({ min: MIN_AGE, max: MAX_AGE }),
-    password: passwordHash,
     role,
   };
 };
 
 export const generateUsers = (qty, options) => Array.from({ length: qty }, () => generateUser(options));
 
-export const generateCouriers = (qty, { passwordHash }) =>
-  generateUsers(qty, { role: USER_ROLES.COURIER, passwordHash });
+export const generateCouriers = (qty) => generateUsers(qty, { role: USER_ROLES.COURIER });

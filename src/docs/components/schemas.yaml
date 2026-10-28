@@ -485,8 +485,8 @@ components:
     MockUser:
       type: object
       description: >-
-        Usuario simulado con la misma forma que el modelo. El email usa el dominio `@shipnow.test` y la contraseña
-        es siempre `coder123`, que se devuelve ya hasheada.
+        Usuario simulado con la forma del modelo, sin contraseña. El email usa el dominio `@shipnow.test`.
+        La contraseña (`coder123`, hasheada) solo se agrega a los usuarios que se guardan con los endpoints de carga.
       properties:
         _id:
           $ref: '#/components/schemas/ObjectId'
@@ -505,10 +505,6 @@ components:
           minimum: 18
           maximum: 75
           example: 53
-        password:
-          type: string
-          description: Hash bcrypt de `coder123`.
-          example: $2b$10$XveIH873FWn2sSJr/GF70up//qpIot3m4DngGHM/Rqf3qG5BBmkje
         role:
           $ref: '#/components/schemas/UserRole'
 
