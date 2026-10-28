@@ -59,6 +59,62 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+    post:
+      tags: [Orders]
+      summary: Crea un pedido
+      description: >-
+        Crea un pedido para un cliente existente con rol `USER`. Siempre empieza en `PENDING` y sin entrega.
+        El `code` y el `total` los calcula la API. Las validaciones se hacen en este orden: campos obligatorios,
+        tipo de `customer`, dirección de envío, ítems, prioridad y, por último, que el cliente exista y tenga rol `USER`.
+      operationId: createOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCreate'
+      responses:
+        '201':
+          description: Pedido creado, con los datos de contacto del cliente.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/Order'
+        '400':
+          description: Datos inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                MissingFields:
+                  $ref: '#/components/examples/OrderMissingFields'
+                AddressMissingFields:
+                  $ref: '#/components/examples/OrderAddressMissingFields'
+                InvalidFieldType:
+                  $ref: '#/components/examples/OrderCustomerInvalidType'
+                ItemsEmpty:
+                  $ref: '#/components/examples/OrderItemsEmpty'
+                ItemInvalidQuantity:
+                  $ref: '#/components/examples/OrderItemInvalidQuantity'
+                InvalidPriority:
+                  $ref: '#/components/examples/OrderPriorityInvalid'
+                CustomerNotUser:
+                  $ref: '#/components/examples/OrderCustomerNotUser'
+                InvalidJson:
+                  $ref: '#/components/examples/InvalidJson'
+        '404':
+          $ref: '#/components/responses/UserNotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /api/orders/{oid}:
     get:
       tags: [Orders]
@@ -81,5 +137,72 @@ paths:
                         $ref: '#/components/schemas/Order'
         '404':
           $ref: '#/components/responses/OrderNotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/orders/{oid}/status:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+
+    patch:
+      tags: [Orders]
+      summary: Cambia el estado de un pedido
+      description: >-
+        Primero se valida el estado y después que el pedido exista. Si ya tiene ese estado, se devuelve sin cambios.
+
+
+        Transiciones permitidas: `PENDING` → `ASSIGNED` o `CANCELLED`; `ASSIGNED` → `IN_TRANSIT` o `CANCELLED`;
+        `IN_TRANSIT` → `DELIVERED`. `DELIVERED` y `CANCELLED` son estados finales.
+
+
+        `ASSIGNED`, `IN_TRANSIT` y `DELIVERED` exigen que el pedido tenga una entrega con repartidor. Si el pedido
+        tiene entrega, su estado se actualiza junto con el del pedido (y `deliveredAt` al pasar a `DELIVERED`).
+      operationId: changeOrderStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderStatusChange'
+      responses:
+        '200':
+          description: Pedido con el estado actualizado.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/Order'
+        '400':
+          description: Estado inválido o ausente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                InvalidStatus:
+                  $ref: '#/components/examples/OrderStatusInvalid'
+                MissingStatus:
+                  $ref: '#/components/examples/OrderStatusMissing'
+                InvalidJson:
+                  $ref: '#/components/examples/InvalidJson'
+        '404':
+          $ref: '#/components/responses/OrderNotFound'
+        '409':
+          description: La transición no está permitida o el pedido no tiene repartidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                TransitionNotAllowed:
+                  $ref: '#/components/examples/OrderStatusTransitionNotAllowed'
+                CourierRequired:
+                  $ref: '#/components/examples/OrderCourierRequired'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
         '500':
           $ref: '#/components/responses/InternalServerError'

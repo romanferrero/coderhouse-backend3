@@ -123,7 +123,7 @@ La información general (nombre, versión tomada del `package.json`, descripció
 | Tag          | Endpoints | Notas |
 | ------------ | --------- | ----- |
 | `Users`      | `GET/POST /api/users`, `GET/PUT/DELETE /api/users/{uid}`, `PATCH /api/users/{uid}/role` | Alta, edición, cambio de rol y baja |
-| `Orders`     | `GET /api/orders`, `GET /api/orders/{oid}` | Solo lectura, filtros por estado y prioridad |
+| `Orders`     | `GET/POST /api/orders`, `GET /api/orders/{oid}`, `PATCH /api/orders/{oid}/status` | Alta, consulta con filtros por estado y prioridad, y cambio de estado |
 | `Deliveries` | `GET /api/deliveries`, `GET /api/deliveries/{did}` | Solo lectura, filtro por estado |
 | `Mocks`      | `GET /api/mocks/{users,couriers,orders,deliveries}`, `POST /api/mocks/seed`, `POST /api/mocks/seed/{users,couriers,orders}`, `DELETE /api/mocks/seed` | Separa lo que solo genera datos (GET) de lo que escribe en MongoDB (POST/DELETE) |
 | `Logger`     | `GET /api/loggerTest` | Aclarado como herramienta de validación, no funcionalidad de negocio |
@@ -242,11 +242,13 @@ Cada error que pasa por el middleware queda registrado con el logger: los `4xx` 
 | `INVALID_FIELD_TYPE`             | 400  | Un campo de texto (`email`, `password`, `code`, `title`…) llega como array, objeto o número |
 | `NO_FIELDS_TO_UPDATE`            | 400  | Un `PUT` sin ningún campo editable |
 | `INVALID_ROLE`                   | 400  | Rol fuera de `USER_ROLES` |
-| `INVALID_STATUS`                 | 400  | Estado inválido de producto, pedido o entrega |
+| `INVALID_STATUS`                 | 400  | Estado inválido de producto, pedido o entrega (en filtros o al cambiar el estado de un pedido) |
 | `INVALID_PRIORITY`               | 400  | Prioridad de pedido inválida |
 | `USER_NOT_FOUND`                 | 404  | Usuario inexistente |
 | `PRODUCT_NOT_FOUND`              | 404  | Producto inexistente |
 | `ORDER_NOT_FOUND`                | 404  | Pedido inexistente |
+| `ORDER_STATUS_TRANSITION_NOT_ALLOWED` | 409 | El pedido no puede pasar a ese estado (ej. `PENDING` → `DELIVERED`, o un pedido ya `CANCELLED`) |
+| `ORDER_COURIER_REQUIRED`         | 409  | Se intenta pasar a `ASSIGNED`, `IN_TRANSIT` o `DELIVERED` un pedido sin repartidor |
 | `DELIVERY_NOT_FOUND`             | 404  | Entrega inexistente |
 | `USER_EMAIL_ALREADY_REGISTERED`  | 409  | Email ya registrado |
 | `PRODUCT_CODE_ALREADY_EXISTS`    | 409  | Código de producto repetido |
@@ -292,6 +294,9 @@ curl -X POST http://localhost:8080/api/users -H "Content-Type: application/json"
 curl -X POST http://localhost:8080/api/products -H "Content-Type: application/json"   -d '{"title":"Caja","code":{"$ne":null},"price":10,"category":"embalaje"}'      # 400 INVALID_FIELD_TYPE
 curl -X POST http://localhost:8080/api/products -H "Content-Type: application/json" \
   -d '{"title":"Caja","code":"BOX","price":-1,"category":"embalaje"}'             # 400 VALIDATION_ERROR
+curl -X POST http://localhost:8080/api/orders -H "Content-Type: application/json" -d '{}'   # 400 MISSING_REQUIRED_FIELDS
+curl -X PATCH http://localhost:8080/api/orders/<oid>/status -H "Content-Type: application/json"   -d '{"status":"volando"}'                                         # 400 INVALID_STATUS
+curl -X PATCH http://localhost:8080/api/orders/<oid-pending>/status -H "Content-Type: application/json"   -d '{"status":"DELIVERED"}'                                       # 409 ORDER_STATUS_TRANSITION_NOT_ALLOWED
 ```
 
 Para `409 USER_EMAIL_ALREADY_REGISTERED`, registrar dos veces el mismo usuario.
@@ -642,12 +647,23 @@ Todas las respuestas tienen la forma `{ status: 'success', payload }` o `{ statu
 
 Roles válidos: `ADMIN`, `USER` (cliente) y `COURIER` (repartidor).
 
-### Pedidos — `/api/orders` (solo lectura)
+### Pedidos — `/api/orders`
 
-| Método | Ruta    | Descripción                                                                         |
-| ------ | ------- | ----------------------------------------------------------------------------------- |
-| GET    | `/`     | Lista pedidos con el cliente populado. Query: `page`, `limit`, `status`, `priority` |
-| GET    | `/:oid` | Obtiene un pedido                                                                   |
+| Método | Ruta           | Descripción                                                                         |
+| ------ | -------------- | ----------------------------------------------------------------------------------- |
+| GET    | `/`            | Lista pedidos con el cliente populado. Query: `page`, `limit`, `status`, `priority` |
+| GET    | `/:oid`        | Obtiene un pedido                                                                   |
+| POST   | `/`            | Crea un pedido (`customer`, `items`, `shippingAddress` obligatorios; `priority` opcional) |
+| PATCH  | `/:oid/status` | Cambia el estado (`{ "status": "CANCELLED" }`) respetando las transiciones permitidas |
+
+- El pedido se crea en `PENDING` y sin entrega. El `code` (`ORD-XXXXXXXX`) y el `total` (suma de `quantity * unitPrice`) los calcula la API.
+- El `customer` tiene que ser un usuario existente con rol `USER` (`404 USER_NOT_FOUND` si no existe, `400 VALIDATION_ERROR` si es repartidor o admin).
+- Transiciones de estado: `PENDING` → `ASSIGNED` / `CANCELLED`; `ASSIGNED` → `IN_TRANSIT` / `CANCELLED`; `IN_TRANSIT` → `DELIVERED`. `DELIVERED` y `CANCELLED` son finales (`409 ORDER_STATUS_TRANSITION_NOT_ALLOWED`).
+- `ASSIGNED`, `IN_TRANSIT` y `DELIVERED` exigen una entrega con repartidor (`409 ORDER_COURIER_REQUIRED`). Si el pedido tiene entrega, su estado se actualiza junto con el del pedido.
+
+```bash
+curl -X POST http://localhost:8080/api/orders   -H "Content-Type: application/json"   -d '{"customer":"<uid>","items":[{"title":"Silla","quantity":2,"unitPrice":45000}],"shippingAddress":{"street":"Av. Corrientes 1234","city":"Buenos Aires","zipCode":"C1043"}}'
+```
 
 ### Entregas — `/api/deliveries` (solo lectura)
 
@@ -691,6 +707,7 @@ La regla que seguí: **el Repository sabe _cómo_ se guardan y buscan los datos;
 - **El estado del producto se deriva del stock**: con stock > 0 es `AVAILABLE`, si no, `OUT_OF_STOCK`. El cliente no puede forzar el estado.
 - **El catálogo por defecto solo muestra productos con stock**; se puede pedir `OUT_OF_STOCK` explícitamente.
 - **Unicidad** de `code` de producto y `email` de usuario (responde 409).
+- **Los pedidos los calcula la API**: código, total y estado inicial `PENDING`; solo un `USER` puede hacer pedidos y los cambios de estado siguen `ORDER_STATUS_TRANSITIONS`.
 - **Todo usuario nuevo es `USER`**: el rol solo se cambia por `PATCH /:uid/role`, validado contra `USER_ROLES`.
 - **Nunca se puede quedar el sistema sin administradores**: no se puede degradar ni eliminar al último `ADMIN`.
 - **Hash de contraseñas** con bcrypt antes de persistir.
@@ -706,6 +723,7 @@ Con esta división, los Services reciben su Repository por constructor, así que
 USER_ROLES      = { ADMIN, USER, COURIER }
 PRODUCT_STATUS  = { AVAILABLE, OUT_OF_STOCK, DISCONTINUED }
 ORDER_STATUS    = { PENDING, ASSIGNED, IN_TRANSIT, DELIVERED, CANCELLED }
+ORDER_STATUS_TRANSITIONS         // a qué estados puede pasar un pedido desde cada estado
 ORDER_PRIORITY  = { LOW, NORMAL, HIGH, URGENT }
 DELIVERY_STATUS = { WAITING_COURIER, ASSIGNED, IN_TRANSIT, DELIVERED, CANCELLED }
 DELIVERY_STATUS_BY_ORDER_STATUS  // estado de la entrega según el del pedido

@@ -46,7 +46,7 @@ const definition = {
   servers: [{ url: `http://localhost:${config.port}`, description: `Servidor local (${config.nodeEnv})` }],
   tags: [
     { name: 'Users', description: 'Usuarios: clientes (USER), repartidores (COURIER) y administradores (ADMIN)' },
-    { name: 'Orders', description: 'Pedidos de los clientes (solo lectura)' },
+    { name: 'Orders', description: 'Pedidos de los clientes: consulta, alta y cambio de estado' },
     { name: 'Deliveries', description: 'Entregas de los pedidos, asignadas a un repartidor (solo lectura)' },
     {
       name: 'Mocks',

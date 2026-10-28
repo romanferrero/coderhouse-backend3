@@ -21,6 +21,15 @@ export const ORDER_STATUS = Object.freeze({
   CANCELLED: 'CANCELLED',
 });
 
+// Estados a los que puede pasar un pedido desde cada estado. DELIVERED y CANCELLED son finales.
+export const ORDER_STATUS_TRANSITIONS = Object.freeze({
+  [ORDER_STATUS.PENDING]: Object.freeze([ORDER_STATUS.ASSIGNED, ORDER_STATUS.CANCELLED]),
+  [ORDER_STATUS.ASSIGNED]: Object.freeze([ORDER_STATUS.IN_TRANSIT, ORDER_STATUS.CANCELLED]),
+  [ORDER_STATUS.IN_TRANSIT]: Object.freeze([ORDER_STATUS.DELIVERED]),
+  [ORDER_STATUS.DELIVERED]: Object.freeze([]),
+  [ORDER_STATUS.CANCELLED]: Object.freeze([]),
+});
+
 export const ORDER_PRIORITY = Object.freeze({
   LOW: 'LOW',
   NORMAL: 'NORMAL',

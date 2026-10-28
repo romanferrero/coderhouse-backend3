@@ -256,6 +256,94 @@ components:
         details:
           id: '6650f1a2b3c4d5e6f7a8b9c0'
 
+    OrderMissingFields:
+      summary: MISSING_REQUIRED_FIELDS — faltan datos del pedido
+      value:
+        status: error
+        code: MISSING_REQUIRED_FIELDS
+        message: 'Faltan campos obligatorios: customer, items, shippingAddress.'
+        details:
+          fields: [customer, items, shippingAddress]
+
+    OrderAddressMissingFields:
+      summary: MISSING_REQUIRED_FIELDS — dirección de envío incompleta
+      value:
+        status: error
+        code: MISSING_REQUIRED_FIELDS
+        message: 'Faltan campos obligatorios: shippingAddress.city, shippingAddress.zipCode.'
+        details:
+          fields: [shippingAddress.city, shippingAddress.zipCode]
+
+    OrderCustomerInvalidType:
+      summary: INVALID_FIELD_TYPE — customer no llegó como texto
+      value:
+        status: error
+        code: INVALID_FIELD_TYPE
+        message: 'Estos campos deben ser texto: customer.'
+        details:
+          fields: [customer]
+          expected: string
+
+    OrderItemsEmpty:
+      summary: VALIDATION_ERROR — el pedido no tiene ítems
+      value:
+        status: error
+        code: VALIDATION_ERROR
+        message: El pedido debe tener al menos un ítem.
+        details:
+          field: items
+
+    OrderItemInvalidQuantity:
+      summary: VALIDATION_ERROR — cantidad inválida en un ítem
+      description: '`details.field` indica el ítem y el campo (`title`, `quantity` o `unitPrice`).'
+      value:
+        status: error
+        code: VALIDATION_ERROR
+        message: La cantidad de cada ítem debe ser un número entero mayor o igual a 1.
+        details:
+          field: items[1].quantity
+
+    OrderCustomerNotUser:
+      summary: VALIDATION_ERROR — el cliente no tiene rol USER
+      value:
+        status: error
+        code: VALIDATION_ERROR
+        message: El cliente del pedido debe tener rol USER.
+        details:
+          field: customer
+          role: COURIER
+
+    OrderStatusMissing:
+      summary: INVALID_STATUS — el body no trae `status`
+      value:
+        status: error
+        code: INVALID_STATUS
+        message: 'Estado inválido. Valores permitidos: PENDING, ASSIGNED, IN_TRANSIT, DELIVERED, CANCELLED.'
+        details:
+          received: null
+          allowed: [PENDING, ASSIGNED, IN_TRANSIT, DELIVERED, CANCELLED]
+
+    OrderStatusTransitionNotAllowed:
+      summary: ORDER_STATUS_TRANSITION_NOT_ALLOWED — el pedido no puede pasar a ese estado
+      value:
+        status: error
+        code: ORDER_STATUS_TRANSITION_NOT_ALLOWED
+        message: 'Un pedido PENDING no puede pasar a DELIVERED. Estados posibles: ASSIGNED, CANCELLED.'
+        details:
+          from: PENDING
+          to: DELIVERED
+          allowed: [ASSIGNED, CANCELLED]
+
+    OrderCourierRequired:
+      summary: ORDER_COURIER_REQUIRED — el pedido no tiene repartidor
+      value:
+        status: error
+        code: ORDER_COURIER_REQUIRED
+        message: 'El pedido "6650f1a2b3c4d5e6f7a8b9c0" no tiene un repartidor asignado: no puede pasar a ASSIGNED.'
+        details:
+          id: '6650f1a2b3c4d5e6f7a8b9c0'
+          status: ASSIGNED
+
     # ---------- Entregas ----------
     DeliveryStatusInvalid:
       summary: INVALID_STATUS — estado de entrega inválido

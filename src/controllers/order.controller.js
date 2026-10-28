@@ -16,6 +16,16 @@ class OrderController {
     const order = await this.service.getOrderById(req.params.oid);
     res.status(HTTP_STATUS.OK).json({ status: 'success', payload: order });
   };
+
+  create = async (req, res) => {
+    const order = await this.service.createOrder(req.body);
+    res.status(HTTP_STATUS.CREATED).json({ status: 'success', payload: order });
+  };
+
+  changeStatus = async (req, res) => {
+    const order = await this.service.changeOrderStatus(req.params.oid, req.body?.status);
+    res.status(HTTP_STATUS.OK).json({ status: 'success', payload: order });
+  };
 }
 
 export default new OrderController(orderService);

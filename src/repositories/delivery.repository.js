@@ -25,6 +25,15 @@ class DeliveryRepository {
     return populateRelations(DeliveryModel.findById(id)).lean();
   }
 
+  // Cada pedido tiene como máximo una entrega.
+  async findByOrder(orderId) {
+    return DeliveryModel.findOne({ order: orderId }).lean();
+  }
+
+  async updateById(id, data) {
+    return DeliveryModel.findByIdAndUpdate(id, data, { returnDocument: 'after', runValidators: true }).lean();
+  }
+
   async createMany(deliveries) {
     const created = await DeliveryModel.insertMany(deliveries);
     return created.length;

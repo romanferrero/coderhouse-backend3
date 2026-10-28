@@ -128,6 +128,29 @@ export class OrderNotFoundError extends AppError {
   }
 }
 
+// El cambio de estado no respeta ORDER_STATUS_TRANSITIONS (ej. PENDING → DELIVERED).
+export class OrderStatusTransitionError extends AppError {
+  constructor({ from, to, allowed }) {
+    super(ERRORS.ORDER_STATUS_TRANSITION_NOT_ALLOWED, {
+      message:
+        allowed.length > 0
+          ? `Un pedido ${from} no puede pasar a ${to}. Estados posibles: ${list(allowed)}.`
+          : `Un pedido ${from} ya no puede cambiar de estado.`,
+      details: { from, to, allowed },
+    });
+  }
+}
+
+// ASSIGNED, IN_TRANSIT y DELIVERED exigen una entrega con repartidor.
+export class OrderCourierRequiredError extends AppError {
+  constructor({ id, status }) {
+    super(ERRORS.ORDER_COURIER_REQUIRED, {
+      message: `El pedido "${id}" no tiene un repartidor asignado: no puede pasar a ${status}.`,
+      details: { id, status },
+    });
+  }
+}
+
 export class DeliveryNotFoundError extends AppError {
   constructor(id) {
     super(ERRORS.DELIVERY_NOT_FOUND, { message: `Entrega con id "${id}" no encontrada.`, details: { id } });

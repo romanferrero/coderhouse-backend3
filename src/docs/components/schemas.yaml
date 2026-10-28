@@ -71,6 +71,8 @@ components:
         - PRODUCT_NOT_FOUND
         - PRODUCT_CODE_ALREADY_EXISTS
         - ORDER_NOT_FOUND
+        - ORDER_STATUS_TRANSITION_NOT_ALLOWED
+        - ORDER_COURIER_REQUIRED
         - DELIVERY_NOT_FOUND
         - MOCK_INVALID_QUANTITY
         - MOCK_NEGATIVE_QUANTITY
@@ -417,6 +419,39 @@ components:
           type: string
           format: date-time
           example: '2026-10-18T09:12:44.000Z'
+
+    OrderCreate:
+      type: object
+      description: >-
+        Body para crear un pedido. El pedido se crea en `PENDING` y sin entrega; el `code` y el `total`
+        (suma de `quantity * unitPrice`) los calcula la API. Si se envían `status`, `code` o `total`, se ignoran.
+      required: [customer, items, shippingAddress]
+      properties:
+        customer:
+          allOf:
+            - $ref: '#/components/schemas/ObjectId'
+          description: Id de un usuario existente con rol `USER`.
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        shippingAddress:
+          $ref: '#/components/schemas/ShippingAddress'
+        priority:
+          allOf:
+            - $ref: '#/components/schemas/OrderPriority'
+          description: Opcional, `NORMAL` por defecto. Acepta minúsculas.
+
+    OrderStatusChange:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+      description: Acepta mayúsculas o minúsculas (`cancelled` = `CANCELLED`).
+      example:
+        status: CANCELLED
 
     OrderSummary:
       type: object

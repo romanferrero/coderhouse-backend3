@@ -50,6 +50,16 @@ export const ERROR_DICTIONARY = Object.freeze({
 
   // ---------- Pedidos y entregas ----------
   ORDER_NOT_FOUND: define('ORDER_NOT_FOUND', HTTP_STATUS.NOT_FOUND, 'Pedido no encontrado.'),
+  ORDER_STATUS_TRANSITION_NOT_ALLOWED: define(
+    'ORDER_STATUS_TRANSITION_NOT_ALLOWED',
+    HTTP_STATUS.CONFLICT,
+    'El pedido no puede pasar a ese estado.'
+  ),
+  ORDER_COURIER_REQUIRED: define(
+    'ORDER_COURIER_REQUIRED',
+    HTTP_STATUS.CONFLICT,
+    'El pedido necesita un repartidor asignado para pasar a ese estado.'
+  ),
   DELIVERY_NOT_FOUND: define('DELIVERY_NOT_FOUND', HTTP_STATUS.NOT_FOUND, 'Entrega no encontrada.'),
 
   // ---------- Módulo de mocks ----------

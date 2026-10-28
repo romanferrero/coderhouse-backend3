@@ -27,6 +27,18 @@ class OrderRepository {
     return OrderModel.distinct('_id', { customer: { $in: customerIds } });
   }
 
+  async create(data) {
+    const created = await OrderModel.create(data);
+    return this.findById(created._id);
+  }
+
+  async updateById(id, data) {
+    if (!isValidObjectId(id)) return null;
+    return OrderModel.findByIdAndUpdate(id, data, { returnDocument: 'after', runValidators: true })
+      .populate('customer', CUSTOMER_PROJECTION)
+      .lean();
+  }
+
   // Inserción masiva: corre las validaciones del esquema y devuelve la cantidad insertada.
   async createMany(orders) {
     const created = await OrderModel.insertMany(orders);
