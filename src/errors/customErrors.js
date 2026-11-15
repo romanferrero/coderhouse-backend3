@@ -157,6 +157,83 @@ export class DeliveryNotFoundError extends AppError {
   }
 }
 
+// ---------- Carga de archivos ----------
+
+// La request no trae un archivo en el campo esperado (o no es multipart/form-data).
+export class FileRequiredError extends AppError {
+  constructor(field) {
+    super(ERRORS.FILE_REQUIRED, {
+      message: `No se envió ningún archivo. Tiene que llegar como multipart/form-data en el campo "${field}".`,
+      details: { field },
+    });
+  }
+}
+
+// El mimetype o la extensión no están entre los permitidos (o no coinciden entre sí).
+export class InvalidFileTypeError extends AppError {
+  constructor({ fileName, mimeType, allowed }) {
+    super(ERRORS.INVALID_FILE_TYPE, {
+      message: `El archivo "${fileName}" (${mimeType}) no está permitido. Tipos aceptados: ${list(allowed)}.`,
+      details: { fileName, mimeType, allowed },
+    });
+  }
+}
+
+export class FileTooLargeError extends AppError {
+  constructor({ field, maxSizeBytes }) {
+    const maxSizeMB = maxSizeBytes / (1024 * 1024);
+    super(ERRORS.FILE_TOO_LARGE, {
+      message: `El archivo supera el tamaño máximo de ${maxSizeMB} MB.`,
+      details: { field, maxSizeBytes },
+    });
+  }
+}
+
+// El archivo llegó en otro campo, o llegó más de un archivo (cada carga acepta uno solo).
+export class UnexpectedFileFieldError extends AppError {
+  constructor({ expected, received }) {
+    super(ERRORS.UNEXPECTED_FILE_FIELD, {
+      message:
+        received === expected
+          ? `Se envió más de un archivo en el campo "${expected}": se acepta uno solo por carga.`
+          : `El archivo tiene que enviarse en el campo "${expected}" (se recibió "${received}").`,
+      details: { expected, received },
+    });
+  }
+}
+
+export class InvalidDocumentTypeError extends AppError {
+  constructor(received, allowed) {
+    super(ERRORS.INVALID_DOCUMENT_TYPE, {
+      message: `Tipo de documento inválido. Valores permitidos: ${list(allowed)}.`,
+      details: { received: received ?? null, allowed },
+    });
+  }
+}
+
+export class DocumentNotFoundError extends AppError {
+  constructor(id) {
+    super(ERRORS.DOCUMENT_NOT_FOUND, { message: `Documento con id "${id}" no encontrado.`, details: { id } });
+  }
+}
+
+// Los metadatos están en la base pero el archivo ya no está en el servidor (se borró a mano).
+export class DocumentFileMissingError extends AppError {
+  constructor(id) {
+    super(ERRORS.DOCUMENT_NOT_FOUND, {
+      message: `El archivo del documento "${id}" ya no está disponible en el servidor.`,
+      details: { id },
+    });
+  }
+}
+
+// Falla del disco al escribir el archivo o de MongoDB al registrar sus metadatos.
+export class FileUploadFailedError extends AppError {
+  constructor(cause) {
+    super(ERRORS.FILE_UPLOAD_FAILED, { cause });
+  }
+}
+
 // ---------- Módulo de mocks ----------
 
 // La cantidad no es un número entero ("abc", "2.5", un valor repetido, etc.).

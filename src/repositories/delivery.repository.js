@@ -34,9 +34,26 @@ class DeliveryRepository {
     return DeliveryModel.findByIdAndUpdate(id, data, { returnDocument: 'after', runValidators: true }).lean();
   }
 
+  // Agrega los metadatos de un comprobante. Devuelve la entrega actualizada, con pedido y repartidor.
+  async addProof(id, proof) {
+    if (!isValidObjectId(id)) return null;
+    return populateRelations(
+      DeliveryModel.findByIdAndUpdate(id, { $push: { proofs: proof } }, { returnDocument: 'after', runValidators: true })
+    ).lean();
+  }
+
   async createMany(deliveries) {
     const created = await DeliveryModel.insertMany(deliveries);
     return created.length;
+  }
+
+  // Metadatos de los comprobantes de las entregas que borraría deleteByOrdersOrCouriers.
+  async findProofsByOrdersOrCouriers({ orderIds = [], courierIds = [] }) {
+    const deliveries = await DeliveryModel.find(
+      { $or: [{ order: { $in: orderIds } }, { courier: { $in: courierIds } }] },
+      'proofs'
+    ).lean();
+    return deliveries.flatMap((delivery) => delivery.proofs ?? []);
   }
 
   async deleteByOrdersOrCouriers({ orderIds = [], courierIds = [] }) {

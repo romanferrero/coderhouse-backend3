@@ -61,6 +61,20 @@ export const DELIVERY_STATUSES_WITH_COURIER = Object.freeze([
   DELIVERY_STATUS.DELIVERED,
 ]);
 
+// Documentos que se le pueden cargar a un usuario (POST /api/users/:uid/documents).
+export const USER_DOCUMENT_TYPES = Object.freeze({
+  ID_CARD: 'ID_CARD',
+  DRIVER_LICENSE: 'DRIVER_LICENSE',
+  PROOF_OF_ADDRESS: 'PROOF_OF_ADDRESS',
+});
+
+// Comprobantes de una entrega (POST /api/deliveries/:did/proofs). Si no se indica el tipo, es una foto.
+export const DELIVERY_PROOF_TYPES = Object.freeze({
+  DELIVERY_PHOTO: 'DELIVERY_PHOTO',
+  SIGNED_RECEIPT: 'SIGNED_RECEIPT',
+});
+export const DEFAULT_DELIVERY_PROOF_TYPE = DELIVERY_PROOF_TYPES.DELIVERY_PHOTO;
+
 export const HTTP_STATUS = Object.freeze({
   OK: 200,
   CREATED: 201,

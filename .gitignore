@@ -9,3 +9,6 @@ node_modules/
 # Logs generados por la aplicación: solo se versiona la carpeta (logs/.gitkeep)
 logs/*
 !logs/.gitkeep
+
+# Archivos subidos por los usuarios (documentos y comprobantes): nunca van al repositorio
+uploads/

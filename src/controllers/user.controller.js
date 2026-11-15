@@ -32,6 +32,25 @@ class UserController {
     res.status(HTTP_STATUS.OK).json({ status: 'success', payload: user });
   };
 
+  uploadDocument = async (req, res) => {
+    const user = await this.service.addDocument(req.params.uid, {
+      file: req.file,
+      documentType: req.body?.documentType,
+    });
+    res.status(HTTP_STATUS.CREATED).json({ status: 'success', payload: user });
+  };
+
+  getDocuments = async (req, res) => {
+    const documents = await this.service.getDocuments(req.params.uid);
+    res.status(HTTP_STATUS.OK).json({ status: 'success', payload: documents });
+  };
+
+  // Descarga el archivo con su nombre original (Content-Disposition: attachment).
+  downloadDocument = async (req, res) => {
+    const { absolutePath, fileName } = await this.service.getDocumentFile(req.params.uid, req.params.docId);
+    res.download(absolutePath, fileName);
+  };
+
   delete = async (req, res) => {
     await this.service.deleteUser(req.params.uid);
     res.status(HTTP_STATUS.NO_CONTENT).end();

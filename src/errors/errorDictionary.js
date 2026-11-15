@@ -62,6 +62,31 @@ export const ERROR_DICTIONARY = Object.freeze({
   ),
   DELIVERY_NOT_FOUND: define('DELIVERY_NOT_FOUND', HTTP_STATUS.NOT_FOUND, 'Entrega no encontrada.'),
 
+  // ---------- Carga de archivos ----------
+  FILE_REQUIRED: define('FILE_REQUIRED', HTTP_STATUS.BAD_REQUEST, 'No se envió ningún archivo.'),
+  INVALID_FILE_TYPE: define('INVALID_FILE_TYPE', HTTP_STATUS.BAD_REQUEST, 'El tipo de archivo no está permitido.'),
+  FILE_TOO_LARGE: define(
+    'FILE_TOO_LARGE',
+    HTTP_STATUS.PAYLOAD_TOO_LARGE,
+    'El archivo supera el tamaño máximo permitido.'
+  ),
+  UNEXPECTED_FILE_FIELD: define(
+    'UNEXPECTED_FILE_FIELD',
+    HTTP_STATUS.BAD_REQUEST,
+    'El archivo no se envió en el campo esperado.'
+  ),
+  INVALID_DOCUMENT_TYPE: define(
+    'INVALID_DOCUMENT_TYPE',
+    HTTP_STATUS.BAD_REQUEST,
+    'El tipo de documento indicado no es válido.'
+  ),
+  DOCUMENT_NOT_FOUND: define('DOCUMENT_NOT_FOUND', HTTP_STATUS.NOT_FOUND, 'Documento no encontrado.'),
+  FILE_UPLOAD_FAILED: define(
+    'FILE_UPLOAD_FAILED',
+    HTTP_STATUS.INTERNAL_SERVER_ERROR,
+    'No se pudo guardar el archivo.'
+  ),
+
   // ---------- Módulo de mocks ----------
   MOCK_INVALID_QUANTITY: define(
     'MOCK_INVALID_QUANTITY',

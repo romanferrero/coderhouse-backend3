@@ -1,5 +1,6 @@
 import { Schema, model } from 'mongoose';
-import { USER_ROLES } from '../constants/index.js';
+import { USER_ROLES, USER_DOCUMENT_TYPES } from '../constants/index.js';
+import { createDocumentSchema } from './document.schema.js';
 
 const userSchema = new Schema(
   {
@@ -13,6 +14,8 @@ const userSchema = new Schema(
       enum: Object.values(USER_ROLES),
       default: USER_ROLES.USER,
     },
+    // Metadatos de los documentos subidos (DNI, licencia…). Los archivos están en uploads/users/.
+    documents: { type: [createDocumentSchema(Object.values(USER_DOCUMENT_TYPES))], default: [] },
   },
   { timestamps: true, versionKey: false }
 );

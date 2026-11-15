@@ -2,7 +2,7 @@ import { isValidObjectId } from 'mongoose';
 import { UserModel } from '../models/user.model.js';
 
 // El hash de la contraseña nunca sale del repositorio salvo que se pida explícitamente.
-const PUBLIC_PROJECTION = 'first_name last_name email age role createdAt';
+const PUBLIC_PROJECTION = 'first_name last_name email age role documents createdAt';
 
 class UserRepository {
   async findAll({ filter = {}, page = 1, limit = 10, sort = { createdAt: -1 } } = {}) {
@@ -57,6 +57,12 @@ class UserRepository {
     return created.length;
   }
 
+  // Metadatos de los documentos de varios usuarios (para borrar sus archivos junto con ellos).
+  async findDocumentsByIds(ids) {
+    const users = await UserModel.find({ _id: { $in: ids } }, 'documents').lean();
+    return users.flatMap((user) => user.documents ?? []);
+  }
+
   async deleteByIds(ids) {
     const { deletedCount } = await UserModel.deleteMany({ _id: { $in: ids } });
     return deletedCount;
@@ -69,6 +75,16 @@ class UserRepository {
       runValidators: true,
       projection: PUBLIC_PROJECTION,
     }).lean();
+  }
+
+  // Agrega los metadatos de un documento subido. Devuelve el usuario actualizado.
+  async addDocument(id, document) {
+    if (!isValidObjectId(id)) return null;
+    return UserModel.findByIdAndUpdate(
+      id,
+      { $push: { documents: document } },
+      { returnDocument: 'after', runValidators: true, projection: PUBLIC_PROJECTION }
+    ).lean();
   }
 
   async deleteById(id) {

@@ -1,7 +1,8 @@
 import bcrypt from 'bcryptjs';
 import userRepository from '../repositories/user.repository.js';
+import documentService from './document.service.js';
 import logger from '../logger/index.js';
-import { USER_ROLES, PASSWORD_SALT_ROUNDS } from '../constants/index.js';
+import { USER_ROLES, USER_DOCUMENT_TYPES, PASSWORD_SALT_ROUNDS } from '../constants/index.js';
 import {
   InvalidDataError,
   InvalidFieldTypeError,
@@ -22,12 +23,14 @@ const UPDATE_FIELDS = CREATE_FIELDS;
 const REQUIRED_FIELDS = ['first_name', 'last_name', 'email', 'password'];
 const TEXT_FIELDS = ['first_name', 'last_name', 'email', 'password'];
 const VALID_ROLES = Object.values(USER_ROLES);
+const VALID_DOCUMENT_TYPES = Object.values(USER_DOCUMENT_TYPES);
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 6;
 
 class UserService {
-  constructor(repository) {
+  constructor({ repository, documents }) {
     this.repository = repository;
+    this.documents = documents;
   }
 
   // Los campos de texto tienen que llegar como string: un array u objeto no es un valor válido
@@ -147,12 +150,45 @@ class UserService {
     return updated;
   }
 
+  // ---------- Documentos ----------
+
+  // Multer ya guardó el archivo y validó su tipo y tamaño. Acá se valida el tipo de documento y que
+  // el usuario exista, y se registran los metadatos en el usuario. Si algo falla, el archivo se borra.
+  async addDocument(id, { file, documentType }) {
+    try {
+      const type = this.documents.parseDocumentType(documentType, VALID_DOCUMENT_TYPES);
+      await this.getUserById(id);
+
+      const metadata = this.documents.buildMetadata(file, type);
+      const user = await this.documents.persist(() => this.repository.addDocument(id, metadata));
+      if (!user) throw new UserNotFoundError(id);
+
+      logger.info(`Documento ${type} cargado para el usuario ${id}: ${this.documents.describe(metadata)}`);
+      return user;
+    } catch (error) {
+      await this.documents.discard(file);
+      throw error;
+    }
+  }
+
+  async getDocuments(id) {
+    const user = await this.getUserById(id);
+    return user.documents ?? [];
+  }
+
+  async getDocumentFile(id, documentId) {
+    const user = await this.getUserById(id);
+    return this.documents.getFile(user.documents, documentId);
+  }
+
   async deleteUser(id) {
     const user = await this.getUserById(id);
     await this.ensureNotLastAdmin(user);
     await this.repository.deleteById(id);
     logger.info(`Usuario eliminado: ${id}`);
+    // Sin el usuario, sus documentos quedarían en uploads/ sin entidad.
+    await this.documents.removeFiles(user.documents);
   }
 }
 
-export default new UserService(userRepository);
+export default new UserService({ repository: userRepository, documents: documentService });

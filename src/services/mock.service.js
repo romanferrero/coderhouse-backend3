@@ -4,6 +4,7 @@ import userRepository from '../repositories/user.repository.js';
 import orderRepository from '../repositories/order.repository.js';
 import deliveryRepository from '../repositories/delivery.repository.js';
 import userService from './user.service.js';
+import documentService from './document.service.js';
 import { USER_ROLES, MOCKS } from '../constants/index.js';
 import {
   InvalidRoleError,
@@ -32,10 +33,11 @@ const DELIVERIES_PER_COURIER = 4;
 const toCollectionIds = (docs) => docs.map((doc) => doc._id);
 
 class MockService {
-  constructor({ userRepository, orderRepository, deliveryRepository, hashPassword }) {
+  constructor({ userRepository, orderRepository, deliveryRepository, documents, hashPassword }) {
     this.userRepository = userRepository;
     this.orderRepository = orderRepository;
     this.deliveryRepository = deliveryRepository;
+    this.documents = documents;
     this.hashPassword = hashPassword;
   }
 
@@ -290,11 +292,17 @@ class MockService {
     try {
       const userIds = await this.userRepository.findIdsByEmailDomain(MOCKS.EMAIL_DOMAIN);
       const orderIds = await this.orderRepository.findIdsByCustomers(userIds);
+      // Documentos y comprobantes que se hayan subido a esos usuarios y entregas.
+      const files = [
+        ...(await this.userRepository.findDocumentsByIds(userIds)),
+        ...(await this.deliveryRepository.findProofsByOrdersOrCouriers({ orderIds, courierIds: userIds })),
+      ];
 
       const deliveries = await this.deliveryRepository.deleteByOrdersOrCouriers({ orderIds, courierIds: userIds });
       const orders = await this.orderRepository.deleteByIds(orderIds);
       const users = await this.userRepository.deleteByIds(userIds);
       logger.info('Mocks: datos de prueba eliminados de MongoDB', { users, orders, deliveries });
+      await this.documents.removeFiles(files);
       return { eliminados: { users, orders, deliveries } };
     } catch (error) {
       throw new MockClearFailedError(error);
@@ -306,5 +314,6 @@ export default new MockService({
   userRepository,
   orderRepository,
   deliveryRepository,
+  documents: documentService,
   hashPassword: (password) => userService.hashPassword(password),
 });
