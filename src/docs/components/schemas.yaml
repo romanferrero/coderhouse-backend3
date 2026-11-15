@@ -34,6 +34,18 @@ components:
       description: Se deriva del stock. Los productos dados de baja (`DISCONTINUED`) nunca se devuelven.
       example: AVAILABLE
 
+    UserDocumentType:
+      type: string
+      enum: [ID_CARD, DRIVER_LICENSE, PROOF_OF_ADDRESS]
+      description: '`ID_CARD` (DNI), `DRIVER_LICENSE` (licencia de conducir) o `PROOF_OF_ADDRESS` (comprobante de domicilio).'
+      example: ID_CARD
+
+    DeliveryProofType:
+      type: string
+      enum: [DELIVERY_PHOTO, SIGNED_RECEIPT]
+      description: '`DELIVERY_PHOTO` (foto de la entrega) o `SIGNED_RECEIPT` (remito firmado).'
+      example: DELIVERY_PHOTO
+
     LogLevel:
       type: string
       enum: [fatal, error, warning, info, http, debug]
@@ -74,6 +86,13 @@ components:
         - ORDER_STATUS_TRANSITION_NOT_ALLOWED
         - ORDER_COURIER_REQUIRED
         - DELIVERY_NOT_FOUND
+        - FILE_REQUIRED
+        - INVALID_FILE_TYPE
+        - FILE_TOO_LARGE
+        - UNEXPECTED_FILE_FIELD
+        - INVALID_DOCUMENT_TYPE
+        - DOCUMENT_NOT_FOUND
+        - FILE_UPLOAD_FAILED
         - MOCK_INVALID_QUANTITY
         - MOCK_NEGATIVE_QUANTITY
         - MOCK_QUANTITY_OUT_OF_RANGE
@@ -169,6 +188,11 @@ components:
           example: 31
         role:
           $ref: '#/components/schemas/UserRole'
+        documents:
+          type: array
+          description: Metadatos de los documentos subidos con `POST /api/users/{uid}/documents` (vacío si no tiene).
+          items:
+            $ref: '#/components/schemas/UserDocument'
         createdAt:
           type: string
           format: date-time
@@ -507,6 +531,11 @@ components:
           nullable: true
           description: Solo tiene valor si la entrega está en `DELIVERED`.
           example: null
+        proofs:
+          type: array
+          description: Metadatos de los comprobantes subidos con `POST /api/deliveries/{did}/proofs` (vacío si no tiene).
+          items:
+            $ref: '#/components/schemas/DeliveryProof'
         createdAt:
           type: string
           format: date-time
@@ -515,6 +544,99 @@ components:
           type: string
           format: date-time
           example: '2026-10-18T09:12:44.000Z'
+
+    # ---------- Archivos ----------
+    StoredFile:
+      type: object
+      description: >-
+        Metadatos de un archivo subido, tal como se guardan en MongoDB. El archivo en sí está en la carpeta
+        `uploads/` del servidor: la base nunca guarda su contenido.
+      required: [_id, documentType, originalName, fileName, path, mimeType, size, uploadedAt]
+      properties:
+        _id:
+          $ref: '#/components/schemas/ObjectId'
+        originalName:
+          type: string
+          description: Nombre con el que lo subió el cliente. Es el nombre con el que se descarga.
+          example: dni-frente.pdf
+        fileName:
+          type: string
+          description: Nombre generado por el servidor (fecha en milisegundos + UUID + extensión).
+          example: 1794778248477-ded8e6e6-7e76-4fd1-9370-aa4aae211f3d.pdf
+        path:
+          type: string
+          description: Ruta del archivo en el servidor, relativa a la raíz del proyecto.
+          example: uploads/users/1794778248477-ded8e6e6-7e76-4fd1-9370-aa4aae211f3d.pdf
+        mimeType:
+          type: string
+          enum: [application/pdf, image/jpeg, image/png]
+          example: application/pdf
+        size:
+          type: integer
+          description: Tamaño en bytes (máximo 5 MB).
+          example: 184320
+        uploadedAt:
+          type: string
+          format: date-time
+          example: '2026-11-15T18:30:48.477Z'
+
+    UserDocument:
+      allOf:
+        - $ref: '#/components/schemas/StoredFile'
+        - type: object
+          properties:
+            documentType:
+              $ref: '#/components/schemas/UserDocumentType'
+
+    DeliveryProof:
+      allOf:
+        - $ref: '#/components/schemas/StoredFile'
+        - type: object
+          properties:
+            documentType:
+              $ref: '#/components/schemas/DeliveryProofType'
+      example:
+        _id: '6650f1a2b3c4d5e6f7a8b9d1'
+        documentType: DELIVERY_PHOTO
+        originalName: puerta.jpg
+        fileName: 1794778249012-4b1f0c3e-9a7d-4e21-8c55-0f2d6b9e1a77.jpg
+        path: uploads/deliveries/1794778249012-4b1f0c3e-9a7d-4e21-8c55-0f2d6b9e1a77.jpg
+        mimeType: image/jpeg
+        size: 245760
+        uploadedAt: '2026-11-15T18:31:02.104Z'
+
+    UserDocumentUpload:
+      type: object
+      description: Body `multipart/form-data` para subir un documento de usuario.
+      required: [document, documentType]
+      properties:
+        document:
+          type: string
+          format: binary
+          description: 'El archivo: PDF, JPG o PNG de hasta 5 MB. Uno solo y en este campo.'
+        documentType:
+          allOf:
+            - $ref: '#/components/schemas/UserDocumentType'
+          description: Obligatorio. Acepta minúsculas (`id_card` = `ID_CARD`).
+
+    DeliveryProofUpload:
+      type: object
+      description: Body `multipart/form-data` para subir un comprobante de entrega.
+      required: [proof]
+      properties:
+        proof:
+          type: string
+          format: binary
+          description: 'El archivo: PDF, JPG o PNG de hasta 5 MB. Uno solo y en este campo.'
+        documentType:
+          allOf:
+            - $ref: '#/components/schemas/DeliveryProofType'
+          description: Opcional, `DELIVERY_PHOTO` por defecto. Acepta minúsculas.
+
+    DownloadedFile:
+      type: string
+      format: binary
+      description: Contenido del archivo, con el `Content-Type` que corresponde a su extensión.
 
     # ---------- Datos simulados (no se guardan) ----------
     MockUser:

@@ -26,6 +26,22 @@ components:
       schema:
         $ref: '#/components/schemas/ObjectId'
 
+    DocumentId:
+      name: docId
+      in: path
+      required: true
+      description: '`_id` del documento dentro de `documents` del usuario (se obtiene al subirlo o con `GET /api/users/{uid}/documents`).'
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+
+    ProofId:
+      name: proofId
+      in: path
+      required: true
+      description: '`_id` del comprobante dentro de `proofs` de la entrega (se obtiene al subirlo o con `GET /api/deliveries/{did}/proofs`).'
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+
     ProductId:
       name: pid
       in: path

@@ -364,6 +364,167 @@ components:
         details:
           id: '6650f1a2b3c4d5e6f7a8b9c0'
 
+    # ---------- Archivos ----------
+    UserDocumentFileRequired:
+      summary: FILE_REQUIRED — no llegó ningún archivo en el campo document
+      description: También responde esto si el body no es `multipart/form-data` (por ejemplo, un JSON).
+      value:
+        status: error
+        code: FILE_REQUIRED
+        message: 'No se envió ningún archivo. Tiene que llegar como multipart/form-data en el campo "document".'
+        details:
+          field: document
+
+    DeliveryProofFileRequired:
+      summary: FILE_REQUIRED — no llegó ningún archivo en el campo proof
+      description: También responde esto si el body no es `multipart/form-data` (por ejemplo, un JSON).
+      value:
+        status: error
+        code: FILE_REQUIRED
+        message: 'No se envió ningún archivo. Tiene que llegar como multipart/form-data en el campo "proof".'
+        details:
+          field: proof
+
+    InvalidFileType:
+      summary: INVALID_FILE_TYPE — tipo de archivo no permitido
+      value:
+        status: error
+        code: INVALID_FILE_TYPE
+        message: 'El archivo "animacion.gif" (image/gif) no está permitido. Tipos aceptados: .pdf, .jpg, .jpeg, .png.'
+        details:
+          fileName: animacion.gif
+          mimeType: image/gif
+          allowed: [.pdf, .jpg, .jpeg, .png]
+
+    FileExtensionMismatch:
+      summary: INVALID_FILE_TYPE — la extensión no coincide con el tipo declarado
+      value:
+        status: error
+        code: INVALID_FILE_TYPE
+        message: 'El archivo "dni.exe" (application/pdf) no está permitido. Tipos aceptados: .pdf, .jpg, .jpeg, .png.'
+        details:
+          fileName: dni.exe
+          mimeType: application/pdf
+          allowed: [.pdf, .jpg, .jpeg, .png]
+
+    UserDocumentUnexpectedField:
+      summary: UNEXPECTED_FILE_FIELD — el archivo llegó en otro campo
+      value:
+        status: error
+        code: UNEXPECTED_FILE_FIELD
+        message: 'El archivo tiene que enviarse en el campo "document" (se recibió "archivo").'
+        details:
+          expected: document
+          received: archivo
+
+    UserDocumentTooManyFiles:
+      summary: UNEXPECTED_FILE_FIELD — se envió más de un archivo
+      value:
+        status: error
+        code: UNEXPECTED_FILE_FIELD
+        message: 'Se envió más de un archivo en el campo "document": se acepta uno solo por carga.'
+        details:
+          expected: document
+          received: document
+
+    DeliveryProofUnexpectedField:
+      summary: UNEXPECTED_FILE_FIELD — el archivo llegó en otro campo
+      value:
+        status: error
+        code: UNEXPECTED_FILE_FIELD
+        message: 'El archivo tiene que enviarse en el campo "proof" (se recibió "foto").'
+        details:
+          expected: proof
+          received: foto
+
+    UserDocumentTypeInvalid:
+      summary: INVALID_DOCUMENT_TYPE — tipo de documento inexistente
+      value:
+        status: error
+        code: INVALID_DOCUMENT_TYPE
+        message: 'Tipo de documento inválido. Valores permitidos: ID_CARD, DRIVER_LICENSE, PROOF_OF_ADDRESS.'
+        details:
+          received: PASAPORTE
+          allowed: [ID_CARD, DRIVER_LICENSE, PROOF_OF_ADDRESS]
+
+    UserDocumentTypeMissing:
+      summary: INVALID_DOCUMENT_TYPE — no se envió documentType
+      value:
+        status: error
+        code: INVALID_DOCUMENT_TYPE
+        message: 'Tipo de documento inválido. Valores permitidos: ID_CARD, DRIVER_LICENSE, PROOF_OF_ADDRESS.'
+        details:
+          received: null
+          allowed: [ID_CARD, DRIVER_LICENSE, PROOF_OF_ADDRESS]
+
+    DeliveryProofTypeInvalid:
+      summary: INVALID_DOCUMENT_TYPE — tipo de comprobante inexistente
+      value:
+        status: error
+        code: INVALID_DOCUMENT_TYPE
+        message: 'Tipo de documento inválido. Valores permitidos: DELIVERY_PHOTO, SIGNED_RECEIPT.'
+        details:
+          received: FACTURA
+          allowed: [DELIVERY_PHOTO, SIGNED_RECEIPT]
+
+    MultipartMalformed:
+      summary: BAD_REQUEST — el body multipart llegó mal formado o cortado
+      description: '`details.cause` solo aparece fuera de producción; en producción `details` es `null`.'
+      value:
+        status: error
+        code: BAD_REQUEST
+        message: La solicitud no pudo procesarse.
+        details:
+          cause: Unexpected end of form
+
+    UserDocumentTooLarge:
+      summary: FILE_TOO_LARGE — el archivo supera los 5 MB
+      value:
+        status: error
+        code: FILE_TOO_LARGE
+        message: El archivo supera el tamaño máximo de 5 MB.
+        details:
+          field: document
+          maxSizeBytes: 5242880
+
+    DeliveryProofTooLarge:
+      summary: FILE_TOO_LARGE — el archivo supera los 5 MB
+      value:
+        status: error
+        code: FILE_TOO_LARGE
+        message: El archivo supera el tamaño máximo de 5 MB.
+        details:
+          field: proof
+          maxSizeBytes: 5242880
+
+    DocumentNotFound:
+      summary: DOCUMENT_NOT_FOUND — la entidad no tiene un documento con ese id
+      value:
+        status: error
+        code: DOCUMENT_NOT_FOUND
+        message: Documento con id "6650f1a2b3c4d5e6f7a8b9d1" no encontrado.
+        details:
+          id: '6650f1a2b3c4d5e6f7a8b9d1'
+
+    DocumentFileMissing:
+      summary: DOCUMENT_NOT_FOUND — el documento está registrado pero su archivo ya no está en el servidor
+      value:
+        status: error
+        code: DOCUMENT_NOT_FOUND
+        message: El archivo del documento "6650f1a2b3c4d5e6f7a8b9d1" ya no está disponible en el servidor.
+        details:
+          id: '6650f1a2b3c4d5e6f7a8b9d1'
+
+    FileUploadFailed:
+      summary: FILE_UPLOAD_FAILED — falla del disco o de MongoDB al guardar el archivo
+      description: '`details.cause` solo aparece fuera de producción; en producción `details` es `null`.'
+      value:
+        status: error
+        code: FILE_UPLOAD_FAILED
+        message: No se pudo guardar el archivo.
+        details:
+          cause: 'ENOSPC: no space left on device, write'
+
     # ---------- Mocks ----------
     MockInvalidQuantity:
       summary: MOCK_INVALID_QUANTITY — la cantidad no es un entero (abc, 2.5, parámetro repetido)

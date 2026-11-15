@@ -136,6 +136,7 @@ La información general (nombre, versión tomada del `package.json`, descripció
 | `Users`      | `GET/POST /api/users`, `GET/PUT/DELETE /api/users/{uid}`, `PATCH /api/users/{uid}/role` | Alta, edición, cambio de rol y baja |
 | `Orders`     | `GET/POST /api/orders`, `GET /api/orders/{oid}`, `PATCH /api/orders/{oid}/status` | Alta, consulta con filtros por estado y prioridad, y cambio de estado |
 | `Deliveries` | `GET /api/deliveries`, `GET /api/deliveries/{did}` | Solo lectura, filtro por estado |
+| `Uploads`    | `POST/GET /api/users/{uid}/documents`, `GET /api/users/{uid}/documents/{docId}/file`, `POST/GET /api/deliveries/{did}/proofs`, `GET /api/deliveries/{did}/proofs/{proofId}/file` | Cargas como `multipart/form-data`: campo del archivo, `documentType` con sus valores, tipos y tamaño aceptados, respuesta y errores |
 | `Mocks`      | `GET /api/mocks/{users,couriers,orders,deliveries}`, `POST /api/mocks/seed`, `POST /api/mocks/seed/{users,couriers,orders}`, `DELETE /api/mocks/seed` | Separa lo que solo genera datos (GET) de lo que escribe en MongoDB (POST/DELETE) |
 | `Logger`     | `GET /api/loggerTest` | Aclarado como herramienta de validación, no funcionalidad de negocio |
 | `Products`   | `GET/POST /api/products`, `GET/PUT/DELETE /api/products/{pid}` | Catálogo |
@@ -143,7 +144,7 @@ La información general (nombre, versión tomada del `package.json`, descripció
 
 Cada endpoint indica método, ruta, descripción, parámetros de ruta y de query, body esperado (si lleva), la respuesta exitosa con su schema y **todas las respuestas de error que puede devolver**, con un ejemplo por cada `code` posible (por ejemplo, el `400` de `POST /api/users` muestra `MISSING_REQUIRED_FIELDS`, `INVALID_FIELD_TYPE`, los tres `VALIDATION_ERROR` e `INVALID_JSON`).
 
-**Schemas reutilizables** (`components/schemas`): `User`, `Order`, `OrderItem`, `Delivery`, `Product`, `SuccessResponse`, `ErrorResponse` (con el enum `ErrorCode` del diccionario), `PaginatedResult`, los bodies de entrada (`UserCreate`, `UserUpdate`, `UserRoleChange`, `ProductCreate`, `ProductUpdate`), los datos simulados (`MockUser`, `MockOrder`, `MockDelivery`…) y los resultados de la carga de mocks y del logger. Además hay **parámetros**, **respuestas de error** (`UserNotFound`, `MockSeedForbidden`, `InternalServerError`…) y **ejemplos de error** reutilizables.
+**Schemas reutilizables** (`components/schemas`): `User`, `Order`, `OrderItem`, `Delivery`, `Product`, `SuccessResponse`, `ErrorResponse` (con el enum `ErrorCode` del diccionario), `PaginatedResult`, los bodies de entrada (`UserCreate`, `UserUpdate`, `UserRoleChange`, `ProductCreate`, `ProductUpdate`), los datos simulados (`MockUser`, `MockOrder`, `MockDelivery`…), los resultados de la carga de mocks y del logger, y los de archivos (`StoredFile`, `UserDocument`, `DeliveryProof` y los bodies multipart `UserDocumentUpload` y `DeliveryProofUpload`). Además hay **parámetros**, **respuestas de error** (`UserNotFound`, `MockSeedForbidden`, `InternalServerError`…) y **ejemplos de error** reutilizables.
 
 Los errores documentados son los del [diccionario de errores](#diccionario-de-errores), con el mismo `code`, status, `message` y `details` que devuelve la API: datos inválidos (`400`), recurso no encontrado (`404`), conflictos (`409`), cantidad inválida en mocks (`MOCK_INVALID_QUANTITY`, `MOCK_NEGATIVE_QUANTITY`, `MOCK_QUANTITY_OUT_OF_RANGE`), estado inválido en pedidos y entregas (`INVALID_STATUS`), carga deshabilitada en producción (`403`) y error interno (`500`). La API **no tiene autenticación**, así que no hay respuestas `401`.
 
@@ -161,7 +162,7 @@ src/docs/
 │   └── examples.yaml        # un ejemplo por cada error, con el mismo code, message y details de la API
 └── paths/                   # un archivo por módulo
     ├── users.yaml   orders.yaml   deliveries.yaml   mocks.yaml
-    └── logger.yaml  products.yaml health.yaml
+    └── uploads.yaml logger.yaml   products.yaml     health.yaml
 ```
 
 `app.js` solo monta el resultado:
@@ -182,6 +183,7 @@ app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOpti
 - Los filtros de estado, prioridad y rol son texto libre (aceptan minúsculas), así que también se pueden probar valores inválidos como `status=volando`.
 - Un id con formato inválido (por ejemplo `123`) responde `404`, igual que uno inexistente.
 - `DELETE /api/users/{uid}` y `DELETE /api/products/{pid}` responden `204` sin body.
+- En los `POST` del tag `Uploads`, Swagger UI muestra un selector de archivo y un desplegable para `documentType` (ver [Cómo probar la carga](#cómo-probar-la-carga)).
 - Fuera de producción, los errores con causa técnica (`500`, `INVALID_JSON`) agregan `details.cause`; en producción `details` no la incluye.
 
 ## Manejo de errores
@@ -981,7 +983,7 @@ export const api = request(app); // Supertest la levanta en un puerto temporal p
 | `products.test.js` | `GET/POST /api/products`, `GET/PUT/DELETE /api/products/:pid` | catálogo, alta con estado derivado del stock, edición, baja lógica | `INVALID_STATUS`, `PRODUCT_NOT_FOUND`, `MISSING_REQUIRED_FIELDS`, `INVALID_FIELD_TYPE`, `VALIDATION_ERROR`, `PRODUCT_CODE_ALREADY_EXISTS`, `NO_FIELDS_TO_UPDATE` |
 | `mocks.test.js` | `GET /api/mocks/{users,couriers,orders,deliveries}`, `POST /api/mocks/seed`, `POST /api/mocks/seed/{users,couriers,orders}`, `DELETE /api/mocks/seed` | generación con la cantidad y el rol pedidos (sin escribir en la base), relaciones entre pedidos, clientes, entregas y repartidores, carga en MongoDB, limpieza que conserva los datos reales | `MOCK_INVALID_QUANTITY` (texto, decimal, repetido), `MOCK_NEGATIVE_QUANTITY`, `MOCK_QUANTITY_OUT_OF_RANGE` (0 y 1000), `INVALID_ROLE`, `MOCK_SEED_REQUIREMENTS_NOT_MET` |
 | `logger.test.js` | `GET /api/loggerTest` | niveles registrados y omitidos con `NODE_ENV=test` | `ROUTE_NOT_FOUND` (método inexistente) |
-| `docs.test.js` | `GET /api/docs/`, `GET /api/docs.json` | Swagger UI responde HTML; la spec tiene versión, tags y los endpoints principales | `ROUTE_NOT_FOUND` (método inexistente) |
+| `docs.test.js` | `GET /api/docs/`, `GET /api/docs.json` | Swagger UI responde HTML; la spec tiene versión, tags y los endpoints principales; las cargas están documentadas como `multipart/form-data` con el campo del archivo | `ROUTE_NOT_FOUND` (método inexistente) |
 | `app.test.js` | `GET /api/health`, rutas inexistentes | health check | `ROUTE_NOT_FOUND` (dentro y fuera de `/api`), `BAD_REQUEST` (URL mal codificada) |
 
 **Qué valida cada test.** No alcanza con que el endpoint responda:

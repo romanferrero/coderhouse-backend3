@@ -62,6 +62,20 @@ components:
             DeliveryNotFound:
               $ref: '#/components/examples/DeliveryNotFound'
 
+    FileUploadError:
+      description: >-
+        No se pudo guardar el archivo en el disco o registrar sus metadatos en MongoDB. Si el archivo llegó a
+        guardarse, se borra: no queda ningún archivo sin su entidad.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            FileUploadFailed:
+              $ref: '#/components/examples/FileUploadFailed'
+            InternalServerError:
+              $ref: '#/components/examples/InternalServerError'
+
     MockQuantityInvalid:
       description: >-
         `qty` no es un entero entre 1 y 100. El `code` indica el motivo: no es un entero, es negativo

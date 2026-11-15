@@ -16,14 +16,15 @@ const DOCS_DIR = path.dirname(fileURLToPath(import.meta.url)).replaceAll('\\', '
 
 const DESCRIPTION = `
 API REST de **ShipNow** para gestionar usuarios (clientes y repartidores), pedidos, entregas y productos,
-con un módulo de mocking para generar y cargar datos de prueba.
+con carga de documentos y comprobantes, y un módulo de mocking para generar y cargar datos de prueba.
 
 Esta documentación sirve para consultar y probar los endpoints desde el navegador: cada uno indica
 sus parámetros, el body que espera, la respuesta exitosa y los errores que puede devolver.
 
 **Formato de las respuestas**
 
-- Éxito: \`{ "status": "success", "payload": ... }\` (los \`DELETE\` de usuarios y productos responden \`204\` sin body).
+- Éxito: \`{ "status": "success", "payload": ... }\` (los \`DELETE\` de usuarios y productos responden \`204\` sin body,
+  y las descargas de archivos devuelven el archivo).
 - Error: \`{ "status": "error", "code", "message", "details" }\`. El \`code\` sale del diccionario de errores
   y es lo que el cliente debería leer para decidir qué hacer.
 
@@ -47,7 +48,15 @@ const definition = {
   tags: [
     { name: 'Users', description: 'Usuarios: clientes (USER), repartidores (COURIER) y administradores (ADMIN)' },
     { name: 'Orders', description: 'Pedidos de los clientes: consulta, alta y cambio de estado' },
-    { name: 'Deliveries', description: 'Entregas de los pedidos, asignadas a un repartidor (solo lectura)' },
+    {
+      name: 'Deliveries',
+      description: 'Entregas de los pedidos, asignadas a un repartidor (solo lectura; los comprobantes se cargan en Uploads)',
+    },
+    {
+      name: 'Uploads',
+      description:
+        'Carga y descarga de archivos (multipart/form-data): documentos de usuario y comprobantes de entrega. PDF, JPG o PNG de hasta 5 MB',
+    },
     {
       name: 'Mocks',
       description: 'Generación de datos simulados (GET) y carga o limpieza de datos de prueba en MongoDB (POST / DELETE)',

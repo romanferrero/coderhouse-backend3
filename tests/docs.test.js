@@ -57,6 +57,7 @@ describe('Swagger — /api/docs', () => {
         'Users',
         'Orders',
         'Deliveries',
+        'Uploads',
         'Mocks',
         'Logger',
         'Products',
@@ -72,6 +73,23 @@ describe('Swagger — /api/docs', () => {
       expect(spec.paths['/api/mocks/users']).to.have.property('get');
       expect(spec.paths['/api/mocks/seed']).to.include.all.keys('post', 'delete');
       expect(spec.paths['/api/loggerTest']).to.have.property('get');
+      expect(spec.paths['/api/users/{uid}/documents']).to.include.all.keys('post', 'get');
+      expect(spec.paths['/api/deliveries/{did}/proofs']).to.include.all.keys('post', 'get');
+    });
+
+    it('documenta las cargas de archivos como multipart/form-data con el campo del archivo', () => {
+      const uploads = [
+        { path: '/api/users/{uid}/documents', field: 'document', required: ['document', 'documentType'] },
+        { path: '/api/deliveries/{did}/proofs', field: 'proof', required: ['proof'] },
+      ];
+      uploads.forEach(({ path, field, required }) => {
+        const { content } = spec.paths[path].post.requestBody;
+        expect(content, path).to.have.all.keys('multipart/form-data');
+        const schema = resolveRef(spec, content['multipart/form-data'].schema);
+        expect(schema.properties[field], path).to.include({ type: 'string', format: 'binary' });
+        expect(schema.required, path).to.deep.equal(required);
+        expect(spec.paths[path].post.responses, path).to.include.all.keys('201', '400', '404', '413', '500');
+      });
     });
 
     it('404 ROUTE_NOT_FOUND con un método que no existe sobre la spec', async () => {

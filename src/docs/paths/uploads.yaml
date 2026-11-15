@@ -1,0 +1,302 @@
+# Carga y descarga de archivos: documentos de usuario y comprobantes de entrega.
+paths:
+  /api/users/{uid}/documents:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+
+    post:
+      tags: [Uploads]
+      summary: Sube un documento del usuario
+      description: >-
+        Recibe **un archivo** en el campo `document` y el tipo de documento en `documentType`, como
+        `multipart/form-data`. El archivo se guarda en `uploads/users/` con un nombre generado por el servidor
+        y sus metadatos se agregan a `documents` del usuario.
+
+
+        **Archivo**: PDF, JPG o PNG (`application/pdf`, `image/jpeg`, `image/png`), de hasta **5 MB**. Se exige que
+        la extensión coincida con el tipo declarado.
+
+        **Tipos de documento**: `ID_CARD` (DNI), `DRIVER_LICENSE` (licencia de conducir) o `PROOF_OF_ADDRESS`
+        (comprobante de domicilio). Obligatorio; acepta minúsculas.
+
+
+        Validaciones, en este orden: tipo de archivo y tamaño (mientras llega el archivo, sin guardarlo si no
+        cumple), campo del archivo, que haya llegado un archivo, tipo de documento y que el usuario exista. Si falla
+        alguna validación posterior a guardarlo, el archivo se borra: nunca queda un archivo sin su usuario.
+      operationId: uploadUserDocument
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserDocumentUpload'
+            encoding:
+              document:
+                contentType: application/pdf, image/jpeg, image/png
+      responses:
+        '201':
+          description: Documento guardado. Devuelve el usuario con todos sus documentos (el nuevo es el último).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/User'
+        '400':
+          description: Falta el archivo, el tipo de archivo o de documento no es válido, o el multipart está mal formado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                FileRequired:
+                  $ref: '#/components/examples/UserDocumentFileRequired'
+                InvalidFileType:
+                  $ref: '#/components/examples/InvalidFileType'
+                ExtensionMismatch:
+                  $ref: '#/components/examples/FileExtensionMismatch'
+                UnexpectedField:
+                  $ref: '#/components/examples/UserDocumentUnexpectedField'
+                TooManyFiles:
+                  $ref: '#/components/examples/UserDocumentTooManyFiles'
+                InvalidDocumentType:
+                  $ref: '#/components/examples/UserDocumentTypeInvalid'
+                MissingDocumentType:
+                  $ref: '#/components/examples/UserDocumentTypeMissing'
+                MalformedMultipart:
+                  $ref: '#/components/examples/MultipartMalformed'
+        '404':
+          $ref: '#/components/responses/UserNotFound'
+        '413':
+          description: El archivo supera los 5 MB. No se guarda nada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                FileTooLarge:
+                  $ref: '#/components/examples/UserDocumentTooLarge'
+        '500':
+          $ref: '#/components/responses/FileUploadError'
+
+    get:
+      tags: [Uploads]
+      summary: Lista los documentos del usuario
+      description: Metadatos de los documentos subidos, del más viejo al más nuevo. Para bajar un archivo, usar el `_id` de cada uno.
+      operationId: getUserDocuments
+      responses:
+        '200':
+          description: Documentos del usuario (lista vacía si no tiene).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/UserDocument'
+        '404':
+          $ref: '#/components/responses/UserNotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/users/{uid}/documents/{docId}/file:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+      - $ref: '#/components/parameters/DocumentId'
+
+    get:
+      tags: [Uploads]
+      summary: Descarga un documento del usuario
+      description: >-
+        Devuelve el archivo con su nombre original (`Content-Disposition: attachment`). En Swagger UI aparece
+        un link "Download file".
+      operationId: downloadUserDocument
+      responses:
+        '200':
+          description: El archivo.
+          headers:
+            Content-Disposition:
+              description: Nombre original del archivo.
+              schema:
+                type: string
+                example: attachment; filename="dni-frente.pdf"
+          content:
+            application/pdf:
+              schema:
+                $ref: '#/components/schemas/DownloadedFile'
+            image/jpeg:
+              schema:
+                $ref: '#/components/schemas/DownloadedFile'
+            image/png:
+              schema:
+                $ref: '#/components/schemas/DownloadedFile'
+        '404':
+          description: No existe el usuario, el usuario no tiene ese documento o el archivo ya no está en el servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                UserNotFound:
+                  $ref: '#/components/examples/UserNotFound'
+                DocumentNotFound:
+                  $ref: '#/components/examples/DocumentNotFound'
+                FileMissing:
+                  $ref: '#/components/examples/DocumentFileMissing'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/deliveries/{did}/proofs:
+    parameters:
+      - $ref: '#/components/parameters/DeliveryId'
+
+    post:
+      tags: [Uploads]
+      summary: Sube un comprobante de la entrega
+      description: >-
+        Recibe **un archivo** en el campo `proof` y, opcionalmente, el tipo de comprobante en `documentType`,
+        como `multipart/form-data`. El archivo se guarda en `uploads/deliveries/` con un nombre generado por el
+        servidor y sus metadatos se agregan a `proofs` de la entrega.
+
+
+        **Archivo**: PDF, JPG o PNG (`application/pdf`, `image/jpeg`, `image/png`), de hasta **5 MB**. Se exige que
+        la extensión coincida con el tipo declarado.
+
+        **Tipos de comprobante**: `DELIVERY_PHOTO` (foto de la entrega, el valor por defecto) o `SIGNED_RECEIPT`
+        (remito firmado). Acepta minúsculas.
+
+
+        Mismas validaciones que los documentos de usuario, con la entrega en lugar del usuario. Si falla alguna
+        validación posterior a guardarlo, el archivo se borra.
+      operationId: uploadDeliveryProof
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DeliveryProofUpload'
+            encoding:
+              proof:
+                contentType: application/pdf, image/jpeg, image/png
+      responses:
+        '201':
+          description: >-
+            Comprobante guardado. Devuelve la entrega actualizada, con el pedido, el repartidor y todos sus
+            comprobantes (el nuevo es el último).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        $ref: '#/components/schemas/Delivery'
+        '400':
+          description: Falta el archivo, el tipo de archivo o de comprobante no es válido, o el multipart está mal formado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                FileRequired:
+                  $ref: '#/components/examples/DeliveryProofFileRequired'
+                InvalidFileType:
+                  $ref: '#/components/examples/InvalidFileType'
+                ExtensionMismatch:
+                  $ref: '#/components/examples/FileExtensionMismatch'
+                UnexpectedField:
+                  $ref: '#/components/examples/DeliveryProofUnexpectedField'
+                InvalidDocumentType:
+                  $ref: '#/components/examples/DeliveryProofTypeInvalid'
+                MalformedMultipart:
+                  $ref: '#/components/examples/MultipartMalformed'
+        '404':
+          $ref: '#/components/responses/DeliveryNotFound'
+        '413':
+          description: El archivo supera los 5 MB. No se guarda nada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                FileTooLarge:
+                  $ref: '#/components/examples/DeliveryProofTooLarge'
+        '500':
+          $ref: '#/components/responses/FileUploadError'
+
+    get:
+      tags: [Uploads]
+      summary: Lista los comprobantes de la entrega
+      description: Metadatos de los comprobantes subidos, del más viejo al más nuevo.
+      operationId: getDeliveryProofs
+      responses:
+        '200':
+          description: Comprobantes de la entrega (lista vacía si no tiene).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      payload:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/DeliveryProof'
+        '404':
+          $ref: '#/components/responses/DeliveryNotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/deliveries/{did}/proofs/{proofId}/file:
+    parameters:
+      - $ref: '#/components/parameters/DeliveryId'
+      - $ref: '#/components/parameters/ProofId'
+
+    get:
+      tags: [Uploads]
+      summary: Descarga un comprobante de la entrega
+      description: 'Devuelve el archivo con su nombre original (`Content-Disposition: attachment`).'
+      operationId: downloadDeliveryProof
+      responses:
+        '200':
+          description: El archivo.
+          headers:
+            Content-Disposition:
+              description: Nombre original del archivo.
+              schema:
+                type: string
+                example: attachment; filename="puerta.jpg"
+          content:
+            application/pdf:
+              schema:
+                $ref: '#/components/schemas/DownloadedFile'
+            image/jpeg:
+              schema:
+                $ref: '#/components/schemas/DownloadedFile'
+            image/png:
+              schema:
+                $ref: '#/components/schemas/DownloadedFile'
+        '404':
+          description: No existe la entrega, la entrega no tiene ese comprobante o el archivo ya no está en el servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                DeliveryNotFound:
+                  $ref: '#/components/examples/DeliveryNotFound'
+                DocumentNotFound:
+                  $ref: '#/components/examples/DocumentNotFound'
+                FileMissing:
+                  $ref: '#/components/examples/DocumentFileMissing'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
