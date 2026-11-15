@@ -34,7 +34,11 @@ const LEVEL_BY_ENV = Object.freeze({
 });
 
 const ENVIRONMENT = rawNodeEnv in LEVEL_BY_ENV ? rawNodeEnv : 'development';
-const LOGS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../logs');
+
+// Los tests escriben en logs/test/: los errores que provocan a propósito (404, 400, el fatal de
+// /api/loggerTest…) no se mezclan con los logs de desarrollo.
+const LOGS_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../logs');
+const LOGS_DIR = ENVIRONMENT === 'test' ? path.join(LOGS_ROOT, 'test') : LOGS_ROOT;
 
 const ROTATION = Object.freeze({
   // logs/error.log: al llegar a 5 MB pasa a error1.log, error2.log… y se conservan 5 archivos.

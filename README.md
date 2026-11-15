@@ -401,7 +401,7 @@ El nivel mínimo sale de `NODE_ENV` (la misma variable de entorno del Módulo 1)
 | ------------- | ------------ | --------- |
 | `development` | `debug`      | Todo, con colores en consola |
 | `production`  | `info`       | `info`, `warning`, `error` y `fatal`, sin colores |
-| `test`        | `warning`    | Solo advertencias y errores, y únicamente en los archivos: la consola queda en silencio para no mezclar los logs con la salida de Mocha |
+| `test`        | `warning`    | Solo advertencias y errores, y únicamente en los archivos de `logs/test/`: la consola queda en silencio para no mezclar los logs con la salida de Mocha, y los errores que provocan los tests no se mezclan con los de desarrollo |
 
 Además, en producción la respuesta de error nunca incluye `details.cause`: el detalle técnico queda solo en los logs.
 
@@ -413,7 +413,7 @@ Además, en producción la respuesta de error nunca incluye `details.cause`: el 
 | `logs/app-AAAA-MM-DD.log` | Todos los logs desde el nivel mínimo del entorno | Por fecha: un archivo por día (o cada 20 MB); los anteriores se comprimen (`.gz`) y se borran a los **14 días** |
 | `logs/.app-audit.json`    | Registro interno de winston-daily-rotate-file para saber qué archivos borrar | — |
 
-La carpeta `logs/` se resuelve desde la raíz del proyecto (no depende del directorio desde el que se ejecute `node`) y se crea sola si no existe.
+La carpeta `logs/` se resuelve desde la raíz del proyecto (no depende del directorio desde el que se ejecute `node`) y se crea sola si no existe. Con `NODE_ENV=test` los mismos archivos se escriben en **`logs/test/`**: cada `npm test` provoca errores a propósito (404, 400, el `fatal` de `/api/loggerTest`), y así no aparecen en el `error.log` de desarrollo.
 
 ### Qué se ignora en Git
 
@@ -752,7 +752,7 @@ Para correr una parte: `npm test -- --grep "POST /api/orders"` filtra por el nom
 | Archivo de variables | `.env`                     | `.env.test` |
 | `NODE_ENV`           | `development`              | `test` (lo fija `tests/setup.js`) |
 | Base de datos        | `shipnow`                  | `shipnow_test` (**se vacía en cada test**) |
-| Logs                 | consola + `logs/`          | solo `logs/` (la consola queda en silencio) |
+| Logs                 | consola + `logs/`          | solo `logs/test/` (la consola queda en silencio) |
 
 **Variables de entorno necesarias** (en `.env.test`, ver `.env.test.example`):
 
