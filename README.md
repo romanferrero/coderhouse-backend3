@@ -60,10 +60,14 @@ API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y 
 
 ### Si falta una variable
 
-La app **no arranca** si falta o es inválida alguna variable crítica, y lo registra como `fatal` (consola y `logs/error.log`). Por ejemplo, con `MONGODB_URI` vacía:
+La app **no arranca** si falta o es inválida alguna variable crítica, y lo registra como `fatal` (consola y `logs/error.log`) con el stack del error en las líneas siguientes. Por ejemplo, con `MONGODB_URI` vacía:
 
 ```
 2026-10-14 18:25:30 [fatal]   No se pudo iniciar la aplicación: [config] Faltan variables de entorno obligatorias: MONGODB_URI. Revisá tu archivo .env (podés tomar .env.example como referencia).
+Error: [config] Faltan variables de entorno obligatorias: MONGODB_URI. Revisá tu archivo .env (podés tomar .env.example como referencia).
+    at validateEnv (file:///.../src/config/env.config.js:15:11)
+    at loadConfig (file:///.../src/config/env.config.js:51:33)
+    ...
 ```
 
 ## Estructura del proyecto
@@ -467,10 +471,13 @@ curl "http://localhost:8080/api/no-existe"                     # warning: ROUTE_
 curl -X POST "http://localhost:8080/api/mocks/seed?orders=5"   # info: carga completa (pedidos creados)
 ```
 
-Para ver un `fatal` real, arrancar con MongoDB apagado o con una variable de entorno inválida (ver [Si falta una variable](#si-falta-una-variable)):
+Para ver un `fatal` real, arrancar con MongoDB apagado o con una variable de entorno inválida (ver [Si falta una variable](#si-falta-una-variable)). Igual que los errores `5xx` del `errorHandler`, el `fatal` del arranque lleva el stack en las líneas siguientes, para saber dónde falló:
 
 ```
 2026-10-14 18:25:54 [fatal]   No se pudo iniciar la aplicación: Error al conectar con MongoDB: connect ECONNREFUSED 127.0.0.1:27017
+Error: Error al conectar con MongoDB: connect ECONNREFUSED 127.0.0.1:27017
+    at connectDB (file:///.../src/db/connection.js:...)
+    ...
 ```
 
 Si el arranque falla después de conectar a MongoDB (por ejemplo, con el puerto ocupado), `server.js` registra el `fatal`, cierra la conexión con `disconnectDB` y el proceso termina con código 1 en lugar de quedar colgado:
@@ -478,6 +485,9 @@ Si el arranque falla después de conectar a MongoDB (por ejemplo, con el puerto 
 ```
 2026-10-23 15:49:33 [info]    Conexión a MongoDB establecida (localhost:27017/shipnow)
 2026-10-23 15:49:33 [fatal]   No se pudo iniciar la aplicación: listen EADDRINUSE: address already in use :::8080
+Error: listen EADDRINUSE: address already in use :::8080
+    at Server.setupListenHandle [as _listen2] (node:net:...)
+    ...
 2026-10-23 15:49:33 [info]    Conexión a MongoDB cerrada
 ```
 

@@ -23,12 +23,15 @@ const start = async () => {
 
 // Si el arranque falla después de conectar a MongoDB (ej. puerto ocupado), la conexión
 // abierta mantendría vivo el proceso: se cierra para que termine con código 1.
+// El stack va en las líneas siguientes del log, igual que en los errores 5xx del errorHandler.
 start().catch(async (error) => {
-  logger.fatal(`No se pudo iniciar la aplicación: ${error.message}`);
+  logger.fatal(`No se pudo iniciar la aplicación: ${error.message}`, { stack: error.stack ?? String(error) });
   process.exitCode = 1;
   try {
     await disconnectDB?.();
   } catch (disconnectError) {
-    logger.error(`No se pudo cerrar la conexión con MongoDB: ${disconnectError.message}`);
+    logger.error(`No se pudo cerrar la conexión con MongoDB: ${disconnectError.message}`, {
+      stack: disconnectError.stack,
+    });
   }
 });
