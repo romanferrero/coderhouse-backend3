@@ -23,6 +23,7 @@ API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y 
 - @faker-js/faker (datos simulados, locale español)
 - winston + winston-daily-rotate-file (logging con rotación de archivos)
 - swagger-jsdoc + swagger-ui-express (documentación OpenAPI 3 interactiva)
+- multer (carga de archivos `multipart/form-data`)
 - Mocha + Chai + Supertest (tests funcionales, solo en desarrollo)
 
 ## Cómo correrlo localmente
