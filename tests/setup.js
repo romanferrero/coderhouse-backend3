@@ -10,6 +10,7 @@ const { fakerES } = await import('@faker-js/faker');
 const { default: config } = await import('../src/config/index.js');
 const { connectDB, disconnectDB } = await import('../src/db/connection.js');
 const { clearDatabase, getDatabaseName } = await import('./helpers/db.js');
+const { clearUploads } = await import('./helpers/uploads.js');
 
 // Semilla fija: los datos que generan los mocks salen iguales en cada corrida.
 const FAKER_SEED = 2026;
@@ -38,10 +39,13 @@ export const mochaHooks = {
 
     fakerES.seed(FAKER_SEED);
     await clearDatabase();
+    await clearUploads();
   },
 
   async afterAll() {
     if (isTestDatabase) await clearDatabase();
+    // Los archivos subidos durante las pruebas (uploads/test/) no quedan en el proyecto.
+    await clearUploads();
     await disconnectDB();
   },
 };

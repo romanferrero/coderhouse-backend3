@@ -931,7 +931,7 @@ Las tres están en `devDependencies`: no se instalan en producción.
     PATCH /api/orders/:oid/status
       ✔ 409 ORDER_STATUS_TRANSITION_NOT_ALLOWED si salta estados
   ...
-  115 passing (2s)
+  149 passing (4s)
 ```
 
 Para correr una parte: `npm test -- --grep "POST /api/orders"` filtra por el nombre del `describe` o del `it`.
@@ -944,6 +944,7 @@ Para correr una parte: `npm test -- --grep "POST /api/orders"` filtra por el nom
 | `NODE_ENV`           | `development`              | `test` (lo fija `tests/setup.js`) |
 | Base de datos        | `shipnow`                  | `shipnow_test` (**se vacía en cada test**) |
 | Logs                 | consola + `logs/`          | solo `logs/test/` (la consola queda en silencio) |
+| Archivos subidos     | `uploads/`                 | `uploads/test/` (**se vacía al empezar y al terminar**, y antes de cada test de carga) |
 
 **Variables de entorno necesarias** (en `.env.test`, ver `.env.test.example`):
 
@@ -973,7 +974,7 @@ export const api = request(app); // Supertest la levanta en un puerto temporal p
 
 ### Qué está cubierto
 
-115 tests, con al menos un caso exitoso y uno de error por endpoint:
+149 tests, con al menos un caso exitoso y uno de error por endpoint:
 
 | Archivo | Endpoints | Casos exitosos | Errores validados |
 | ------- | --------- | -------------- | ----------------- |
@@ -982,6 +983,7 @@ export const api = request(app); // Supertest la levanta en un puerto temporal p
 | `deliveries.test.js` | `GET /api/deliveries`, `GET /api/deliveries/:did` | listado con pedido y repartidor populados, filtro por estado | `INVALID_STATUS`, `DELIVERY_NOT_FOUND` |
 | `products.test.js` | `GET/POST /api/products`, `GET/PUT/DELETE /api/products/:pid` | catálogo, alta con estado derivado del stock, edición, baja lógica | `INVALID_STATUS`, `PRODUCT_NOT_FOUND`, `MISSING_REQUIRED_FIELDS`, `INVALID_FIELD_TYPE`, `VALIDATION_ERROR`, `PRODUCT_CODE_ALREADY_EXISTS`, `NO_FIELDS_TO_UPDATE` |
 | `mocks.test.js` | `GET /api/mocks/{users,couriers,orders,deliveries}`, `POST /api/mocks/seed`, `POST /api/mocks/seed/{users,couriers,orders}`, `DELETE /api/mocks/seed` | generación con la cantidad y el rol pedidos (sin escribir en la base), relaciones entre pedidos, clientes, entregas y repartidores, carga en MongoDB, limpieza que conserva los datos reales | `MOCK_INVALID_QUANTITY` (texto, decimal, repetido), `MOCK_NEGATIVE_QUANTITY`, `MOCK_QUANTITY_OUT_OF_RANGE` (0 y 1000), `INVALID_ROLE`, `MOCK_SEED_REQUIREMENTS_NOT_MET` |
+| `uploads.test.js` | `POST/GET /api/users/:uid/documents`, `GET /api/users/:uid/documents/:docId/file`, `POST/GET /api/deliveries/:did/proofs`, `GET /api/deliveries/:did/proofs/:proofId/file` | carga de PDF y JPG con los metadatos guardados y el archivo en disco con el mismo contenido, tipo de documento en minúsculas, tipo de comprobante por defecto, varios documentos por usuario, listado, descarga con el nombre original, borrado de los archivos al eliminar el usuario o los mocks | `FILE_REQUIRED` (sin archivo y con body JSON), `INVALID_FILE_TYPE` (GIF y extensión que no coincide), `FILE_TOO_LARGE`, `UNEXPECTED_FILE_FIELD` (otro campo y dos archivos), `INVALID_DOCUMENT_TYPE` (inexistente y ausente), `USER_NOT_FOUND`, `DELIVERY_NOT_FOUND`, `DOCUMENT_NOT_FOUND` (id ajeno y archivo borrado del disco). En cada error se comprueba que **no quedó ningún archivo** en `uploads/test/` |
 | `logger.test.js` | `GET /api/loggerTest` | niveles registrados y omitidos con `NODE_ENV=test` | `ROUTE_NOT_FOUND` (método inexistente) |
 | `docs.test.js` | `GET /api/docs/`, `GET /api/docs.json` | Swagger UI responde HTML; la spec tiene versión, tags y los endpoints principales; las cargas están documentadas como `multipart/form-data` con el campo del archivo | `ROUTE_NOT_FOUND` (método inexistente) |
 | `app.test.js` | `GET /api/health`, rutas inexistentes | health check | `ROUTE_NOT_FOUND` (dentro y fuera de `/api`), `BAD_REQUEST` (URL mal codificada) |
@@ -997,13 +999,14 @@ export const api = request(app); // Supertest la levanta en un puerto temporal p
 - Cada ejemplo de error documentado usa el status HTTP que el diccionario le asigna a su `code` (por ejemplo, que `ORDER_NOT_FOUND` figure como `404`).
 - **Cada endpoint documentado existe y responde uno de los status que figuran en su documentación** (por ejemplo, `GET /api/orders/{oid}` con un id inexistente responde `404`, como dice Swagger).
 
-**Lo que no se cubre**, porque depende de condiciones que no se reproducen con la app en modo test: los `500` por caída de MongoDB (`INTERNAL_SERVER_ERROR`, `MOCK_SEED_FAILED`, `MOCK_CLEAR_FAILED`, `MOCK_GENERATION_FAILED`) y el `403 MOCK_SEED_FORBIDDEN`, que solo ocurre con `NODE_ENV=production`.
+**Lo que no se cubre**, porque depende de condiciones que no se reproducen con la app en modo test: los `500` por caída de MongoDB o del disco (`INTERNAL_SERVER_ERROR`, `MOCK_SEED_FAILED`, `MOCK_CLEAR_FAILED`, `MOCK_GENERATION_FAILED`, `FILE_UPLOAD_FAILED`) y el `403 MOCK_SEED_FORBIDDEN`, que solo ocurre con `NODE_ENV=production`.
 
 ### Datos de prueba y limpieza
 
 - **Datos controlados**: ningún test depende de datos cargados a mano. Cada test crea lo que necesita con los helpers de `tests/helpers/fixtures.js` (por ejemplo, un cliente válido antes de crear un pedido), que usan los generadores del módulo de mocks: todos los usuarios tienen email `@shipnow.test`.
 - **Repetibles**: Faker usa una semilla fija (`tests/setup.js`), así que los datos generados son los mismos en cada corrida.
-- **Limpieza**: cada grupo vacía la base de testing en un `beforeEach` (cada test arranca de cero) y de nuevo en el `after` del grupo; `tests/setup.js` también la vacía al empezar y al terminar la suite. Se usa `deleteMany` sobre cada colección para conservar los índices (como el de email único).
+- **Limpieza**: cada grupo vacía la base de testing en un `beforeEach` (cada test arranca de cero) y de nuevo en el `after` del grupo; `tests/setup.js` también la vacía al empezar y al terminar la suite. Se usa `deleteMany` sobre cada colección para conservar los índices (como el de email único). Lo mismo con los archivos: `uploads/test/` se borra antes de cada test de carga y al terminar la suite, así **ningún archivo subido durante las pruebas queda en el proyecto**.
+- **Archivos de prueba en memoria**: los PDF, JPG, GIF y el archivo de más de 5 MB se arman con `Buffer` en `tests/helpers/uploads.js` y se envían con `.attach()` de Supertest. No hay archivos de prueba en el repositorio.
 - **Independientes del orden**: como cada test prepara sus propios datos sobre una base vacía, la suite pasa igual corrida dos veces seguidas, en otro orden o archivo por archivo.
 
 ### Organización
@@ -1017,12 +1020,14 @@ tests/
 │   ├── api.js            # Supertest sobre la app de Express
 │   ├── assertions.js     # expectSuccess, expectError, expectPaginated, expectPublicUser
 │   ├── db.js             # clearDatabase
-│   └── fixtures.js       # datos de prueba (clientes, repartidores, pedidos, entregas, productos)
+│   ├── fixtures.js       # datos de prueba (clientes, repartidores, pedidos, entregas, productos)
+│   └── uploads.js        # archivos de prueba en memoria, clearUploads, listUploads
 ├── users.test.js         # un archivo por recurso o módulo
 ├── orders.test.js
 ├── deliveries.test.js
 ├── products.test.js
 ├── mocks.test.js
+├── uploads.test.js       # carga y descarga de documentos y comprobantes
 ├── logger.test.js
 ├── docs.test.js          # Swagger y coherencia con la API
 └── app.test.js           # health y rutas inexistentes
