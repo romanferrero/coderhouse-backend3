@@ -2,7 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import winston from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
-import { rawNodeEnv } from '../config/env.config.js';
+import { rawLogLevel, rawNodeEnv } from '../config/env.config.js';
 
 // Configuración única del logger de ShipNow. El resto del proyecto solo importa
 // `logger` y llama a logger.info(), logger.warning(), etc.
@@ -26,7 +26,7 @@ const LOG_COLORS = Object.freeze({
   debug: 'blue',
 });
 
-// Nivel mínimo según NODE_ENV: en desarrollo se ve todo; en producción, desde info.
+// Nivel mínimo por defecto según NODE_ENV: en desarrollo se ve todo; en producción, desde info.
 const LEVEL_BY_ENV = Object.freeze({
   development: 'debug',
   test: 'warning',
@@ -34,6 +34,11 @@ const LEVEL_BY_ENV = Object.freeze({
 });
 
 const ENVIRONMENT = rawNodeEnv in LEVEL_BY_ENV ? rawNodeEnv : 'development';
+
+// LOG_LEVEL pisa el nivel del entorno (ej. LOG_LEVEL=http en producción para ver cada request
+// mientras se investiga un problema). Si es inválido se usa el del entorno: la validación de la
+// config lo informa como error al arrancar.
+const LEVEL = rawLogLevel in LOG_LEVELS ? rawLogLevel : LEVEL_BY_ENV[ENVIRONMENT];
 
 // Los tests escriben en logs/test/: los errores que provocan a propósito (404, 400, el fatal de
 // /api/loggerTest…) no se mezclan con los logs de desarrollo.
@@ -72,7 +77,7 @@ const baseFormat = winston.format.combine(
 
 const logger = winston.createLogger({
   levels: LOG_LEVELS,
-  level: LEVEL_BY_ENV[ENVIRONMENT],
+  level: LEVEL,
   format: baseFormat,
   transports: [
     // Colores solo en desarrollo: en producción la consola suele ir a un archivo o a un servicio.

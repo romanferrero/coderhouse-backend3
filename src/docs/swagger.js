@@ -44,7 +44,7 @@ const definition = {
     version,
     description: DESCRIPTION,
   },
-  servers: [{ url: `http://localhost:${config.port}`, description: `Servidor local (${config.nodeEnv})` }],
+  servers: [{ url: config.publicUrl, description: `Servidor ${config.nodeEnv}` }],
   tags: [
     { name: 'Users', description: 'Usuarios: clientes (USER), repartidores (COURIER) y administradores (ADMIN)' },
     { name: 'Orders', description: 'Pedidos de los clientes: consulta, alta y cambio de estado' },

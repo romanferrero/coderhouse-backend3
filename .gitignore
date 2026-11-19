@@ -3,6 +3,7 @@ node_modules/
 .env.*
 !.env.example
 !.env.test.example
+!.env.production.example
 *.log
 .DS_Store
 
@@ -12,3 +13,9 @@ logs/*
 
 # Archivos subidos por los usuarios (documentos y comprobantes): nunca van al repositorio
 uploads/
+
+# Reportes de cobertura y archivos temporales
+coverage/
+.nyc_output/
+tmp/
+*.tmp

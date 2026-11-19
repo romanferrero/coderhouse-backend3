@@ -49,6 +49,8 @@ API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y 
    | `MONGODB_URI` | URI de conexión a MongoDB                     | `mongodb://localhost:27017/shipnow`    |
    | `NODE_ENV`    | Entorno: `development`, `production` o `test` | `development`                          |
 
+   Las tres son obligatorias. Las opcionales (`LOG_LEVEL`, `PUBLIC_URL`, `SWAGGER_ENABLED`) y los archivos de cada entorno están en [Variables de entorno](#variables-de-entorno).
+
 3. **Levantar el servidor**
 
    ```bash
@@ -65,10 +67,10 @@ API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y 
 La app **no arranca** si falta o es inválida alguna variable crítica, y lo registra como `fatal` (consola y `logs/error.log`) con el stack del error en las líneas siguientes. Por ejemplo, con `MONGODB_URI` vacía:
 
 ```
-2026-10-14 18:25:30 [fatal]   No se pudo iniciar la aplicación: [config] Faltan variables de entorno obligatorias: MONGODB_URI. Revisá tu archivo .env (podés tomar .env.example como referencia).
-Error: [config] Faltan variables de entorno obligatorias: MONGODB_URI. Revisá tu archivo .env (podés tomar .env.example como referencia).
-    at validateEnv (file:///.../src/config/env.config.js:15:11)
-    at loadConfig (file:///.../src/config/env.config.js:51:33)
+2026-10-14 18:25:30 [fatal]   No se pudo iniciar la aplicación: [config] Faltan variables de entorno obligatorias: MONGODB_URI. Revisá tu archivo .env (podés tomar .env.example como referencia) o las variables que le pasás al contenedor.
+Error: [config] Faltan variables de entorno obligatorias: MONGODB_URI. Revisá tu archivo .env (podés tomar .env.example como referencia) o las variables que le pasás al contenedor.
+    at fail (file:///.../src/config/env.config.js:21:9)
+    at validateEnv (file:///.../src/config/env.config.js:48:5)
     ...
 ```
 
@@ -415,6 +417,8 @@ El nivel mínimo sale de `NODE_ENV` (la misma variable de entorno del Módulo 1)
 | `development` | `debug`      | Todo, con colores en consola |
 | `production`  | `info`       | `info`, `warning`, `error` y `fatal`, sin colores |
 | `test`        | `warning`    | Solo advertencias y errores, y únicamente en los archivos de `logs/test/`: la consola queda en silencio para no mezclar los logs con la salida de Mocha, y los errores que provocan los tests no se mezclan con los de desarrollo |
+
+La variable opcional **`LOG_LEVEL`** pisa el nivel del entorno (por ejemplo, `LOG_LEVEL=http` en producción para ver una línea por request mientras se investiga un problema). Un valor inválido no deja arrancar la app.
 
 Además, en producción la respuesta de error nunca incluye `details.cause`: el detalle técnico queda solo en los logs.
 
