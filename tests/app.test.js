@@ -22,6 +22,12 @@ describe('App — health y rutas inexistentes', () => {
     expect(text).to.not.include('MONGODB_URI');
   });
 
+  it('no anuncia el framework en el header X-Powered-By', async () => {
+    const res = await api.get('/api/health');
+
+    expect(res.headers).to.not.have.property('x-powered-by');
+  });
+
   it('404 ROUTE_NOT_FOUND con una ruta inexistente', async () => {
     const body = expectError(await api.get('/api/no-existe'), 404, 'ROUTE_NOT_FOUND');
 

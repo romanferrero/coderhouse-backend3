@@ -35,6 +35,7 @@ sus parámetros, el body que espera, la respuesta exitosa y los errores que pued
 - Un id con formato inválido responde igual que uno inexistente (\`404\`).
 - Cualquier ruta inexistente responde \`404 ROUTE_NOT_FOUND\` y cualquier falla no prevista \`500 INTERNAL_SERVER_ERROR\`.
 - Fuera de producción, los errores \`500\` agregan la causa técnica en \`details.cause\`.
+- En producción no existen los endpoints internos (\`/api/mocks\` y \`/api/loggerTest\`) y tampoco figuran en esta documentación.
 `;
 
 const definition = {
@@ -67,11 +68,29 @@ const definition = {
   ],
 };
 
-export const swaggerSpec = swaggerJSDoc({
+// Tags de las herramientas internas: se quitan junto con sus rutas cuando no están montadas.
+const INTERNAL_TAGS = Object.freeze(['Mocks', 'Logger']);
+
+// Se arma una sola vez, al importar el módulo: lee los YAML de forma sincrónica, pero solo al arrancar.
+const fullSpec = swaggerJSDoc({
   definition,
   apis: [`${DOCS_DIR}/components/*.yaml`, `${DOCS_DIR}/paths/*.yaml`],
   failOnErrors: true,
 });
+
+// Spec que se sirve. Sin los endpoints internos (producción) se quitan sus rutas
+// (`internalPathPrefixes`, ej. '/api/mocks') y sus tags: la documentación muestra solo lo que existe.
+export const createSwaggerSpec = ({ includeInternal, internalPathPrefixes = [] }) => {
+  if (includeInternal) return fullSpec;
+
+  const isInternal = (path) =>
+    internalPathPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+  return {
+    ...fullSpec,
+    tags: fullSpec.tags.filter((tag) => !INTERNAL_TAGS.includes(tag.name)),
+    paths: Object.fromEntries(Object.entries(fullSpec.paths).filter(([path]) => !isInternal(path))),
+  };
+};
 
 export const swaggerUiOptions = {
   customSiteTitle: 'ShipNow API — Documentación',

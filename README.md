@@ -89,7 +89,7 @@ src/
 ├── repositories/          # único lugar que usa Mongoose (consultas, filtros, proyecciones)
 ├── models/                # solo esquemas de Mongoose (user, product, order, delivery y los metadatos de archivos)
 ├── mocks/                 # generadores de datos simulados (funciones puras con Faker)
-├── routes/                # path → método del Controller, nada más
+├── routes/                # path → método del Controller; index.js monta las rutas internas solo fuera de producción
 ├── errors/                # diccionario de errores, AppError y errores personalizados del dominio
 ├── middlewares/           # errorHandler (único lugar que arma respuestas de error) y requestLogger
 ├── logger/                # configuración única de Winston (niveles, formato, transports, rotación)
@@ -127,7 +127,7 @@ La API se documenta con **OpenAPI 3** y se puede consultar y probar desde el nav
 | **`GET /api/docs`**                    | Swagger UI: documentación interactiva, con "Try it out" para ejecutar cada endpoint |
 | `GET /api/docs.json`                   | La especificación OpenAPI en JSON (para importarla en Postman, Insomnia, etc.) |
 
-Con el servidor levantado (`npm run dev`, ver [Cómo correrlo localmente](#cómo-correrlo-localmente)), abrir **[http://localhost:8080/api/docs](http://localhost:8080/api/docs)**. Si en `.env` se usa otro `PORT`, la ruta es la misma con ese puerto: el servidor que figura en la documentación se arma con el puerto configurado.
+Con el servidor levantado (`npm run dev`, ver [Cómo correrlo localmente](#cómo-correrlo-localmente)), abrir **[http://localhost:8080/api/docs](http://localhost:8080/api/docs)**. Si en `.env` se usa otro `PORT`, la ruta es la misma con ese puerto: el servidor que figura en la documentación es `PUBLIC_URL` o, si no está definida, `http://localhost:<PORT>`. En producción la documentación no incluye los endpoints internos (Mocks y Logger), y se puede apagar con `SWAGGER_ENABLED=false` (ver [Endpoints internos en producción](#endpoints-internos-en-producción)).
 
 ### Qué está documentado
 
@@ -139,8 +139,8 @@ La información general (nombre, versión tomada del `package.json`, descripció
 | `Orders`     | `GET/POST /api/orders`, `GET /api/orders/{oid}`, `PATCH /api/orders/{oid}/status` | Alta, consulta con filtros por estado y prioridad, y cambio de estado |
 | `Deliveries` | `GET /api/deliveries`, `GET /api/deliveries/{did}` | Solo lectura, filtro por estado |
 | `Uploads`    | `POST/GET /api/users/{uid}/documents`, `GET /api/users/{uid}/documents/{docId}/file`, `POST/GET /api/deliveries/{did}/proofs`, `GET /api/deliveries/{did}/proofs/{proofId}/file` | Cargas como `multipart/form-data`: campo del archivo, `documentType` con sus valores, tipos y tamaño aceptados, respuesta y errores |
-| `Mocks`      | `GET /api/mocks/{users,couriers,orders,deliveries}`, `POST /api/mocks/seed`, `POST /api/mocks/seed/{users,couriers,orders}`, `DELETE /api/mocks/seed` | Separa lo que solo genera datos (GET) de lo que escribe en MongoDB (POST/DELETE) |
-| `Logger`     | `GET /api/loggerTest` | Aclarado como herramienta de validación, no funcionalidad de negocio |
+| `Mocks`      | `GET /api/mocks/{users,couriers,orders,deliveries}`, `POST /api/mocks/seed`, `POST /api/mocks/seed/{users,couriers,orders}`, `DELETE /api/mocks/seed` | Separa lo que solo genera datos (GET) de lo que escribe en MongoDB (POST/DELETE). No figura en producción |
+| `Logger`     | `GET /api/loggerTest` | Aclarado como herramienta de validación, no funcionalidad de negocio. No figura en producción |
 | `Products`   | `GET/POST /api/products`, `GET/PUT/DELETE /api/products/{pid}` | Catálogo |
 | `Health`     | `GET /api/health` | Estado de la API (health check): `200` o `503` sin conexión a MongoDB |
 
@@ -445,7 +445,7 @@ La carpeta `logs/` queda en el repositorio solo con un `.gitkeep` vacío. Los ar
 
 ### Endpoint de prueba — `GET /api/loggerTest`
 
-Es una herramienta interna para validar la configuración, no una funcionalidad del negocio. Genera un log de cada nivel (`debug`, `http`, `info`, `warning`, `error`, `fatal`) con el prefijo `[loggerTest]` y responde qué niveles se registraron según el entorno:
+Es una herramienta interna para validar la configuración, no una funcionalidad del negocio, y **no existe en producción** (responde `404`, ver [Endpoints internos en producción](#endpoints-internos-en-producción)). Genera un log de cada nivel (`debug`, `http`, `info`, `warning`, `error`, `fatal`) con el prefijo `[loggerTest]` y responde qué niveles se registraron según el entorno:
 
 ```bash
 curl "http://localhost:8080/api/loggerTest"
@@ -479,7 +479,7 @@ curl "http://localhost:8080/api/loggerTest"
 
 2. **`logs/error.log`**: solo tiene las líneas `[error]` y `[fatal]`, nunca `info` ni `debug`.
 3. **`logs/app-AAAA-MM-DD.log`** (fecha del día): tiene todas las líneas que salieron por consola.
-4. **Producción**: con `NODE_ENV=production`, el endpoint responde `"nivelMinimo": "info"` y `"omitidos": ["debug", "http"]`, y esas dos líneas no aparecen ni en consola ni en archivos.
+4. **Producción**: con `NODE_ENV=production` el endpoint no está montado. El nivel mínimo es `info`: `debug` y `http` no aparecen ni en consola ni en archivos (salvo que se cambie con `LOG_LEVEL`).
 
 Otros eventos para ver en los logs:
 
@@ -528,6 +528,8 @@ Genera **usuarios (clientes), repartidores, pedidos y entregas** con [Faker](htt
 
 - **`GET`** → solo **devuelven** datos simulados. No escriben nada en la base.
 - **`POST` / `DELETE`** → **insertan** (o limpian) datos de prueba en MongoDB.
+
+Es una herramienta de desarrollo y testing: **con `NODE_ENV=production` no se monta** y todas sus rutas responden `404` (ver [Endpoints internos en producción](#endpoints-internos-en-producción)).
 
 ### Endpoints que solo devuelven datos (no guardan)
 
@@ -616,7 +618,7 @@ Los usuarios que se cargan en la base tienen la contraseña `coder123`, guardada
 ### Carga controlada
 
 - `qty` (y `users`, `couriers`, `orders`) debe ser un entero entre 1 y `MOCKS.MAX_QTY` (100); si no, responde `400` con un código distinto según el motivo: `MOCK_INVALID_QUANTITY` (no es un entero), `MOCK_NEGATIVE_QUANTITY` (negativo) o `MOCK_QUANTITY_OUT_OF_RANGE` (0 o más del máximo). `role` se valida contra `USER_ROLES` (`INVALID_ROLE`).
-- Los endpoints de escritura responden **`403 MOCK_SEED_FORBIDDEN` si `NODE_ENV=production`**.
+- Los endpoints de escritura responden **`403 MOCK_SEED_FORBIDDEN` si `NODE_ENV=production`**: es una segunda barrera, porque en producción el módulo ni siquiera se monta.
 - Si MongoDB falla durante la carga, responde `500 MOCK_SEED_FAILED` y deshace lo que esa carga haya llegado a insertar. Ver [cómo probar los casos inválidos](#cómo-probar-los-casos-inválidos).
 - Todos los usuarios de prueba usan el dominio `@shipnow.test` (`MOCKS.EMAIL_DOMAIN`). `POST /seed/orders` solo usa usuarios de prueba, y `DELETE /seed` borra solo esos usuarios, sus pedidos y sus entregas.
 - Los emails llevan un sufijo aleatorio para no chocar con el índice único.
@@ -891,8 +893,8 @@ Las entregas no se crean ni se editan por la API (se generan con los mocks y cam
 
 | Método | Ruta              | Descripción |
 | ------ | ----------------- | ----------- |
-| GET    | `/api/health`     | Verifica que el servidor responde |
-| GET    | `/api/loggerTest` | Genera un log de cada nivel (ver [Endpoint de prueba](#endpoint-de-prueba--get-apiloggertest)) |
+| GET    | `/api/health`     | Estado de la API: entorno, uptime, hora y conexión a MongoDB (ver [Health check](#health-check--get-apihealth)) |
+| GET    | `/api/loggerTest` | Genera un log de cada nivel (ver [Endpoint de prueba](#endpoint-de-prueba--get-apiloggertest)). No existe en producción |
 | GET    | `/api/docs`       | Documentación interactiva con Swagger UI (ver [Documentación de la API](#documentación-de-la-api-swagger)) |
 | GET    | `/api/docs.json`  | Especificación OpenAPI en JSON |
 
@@ -1000,7 +1002,7 @@ export const api = request(app); // Supertest la levanta en un puerto temporal p
 | `uploads.test.js` | `POST/GET /api/users/:uid/documents`, `GET /api/users/:uid/documents/:docId/file`, `POST/GET /api/deliveries/:did/proofs`, `GET /api/deliveries/:did/proofs/:proofId/file` | carga de PDF, JPG y PNG con los metadatos guardados y el archivo en disco con el mismo contenido, tipo de documento en minúsculas, tipo de comprobante por defecto, varios documentos por usuario, listado, **descarga con el nombre original y exactamente el contenido que se subió (byte a byte)**, borrado de los archivos al eliminar el usuario o los mocks | `FILE_REQUIRED` (sin archivo y con body JSON), `INVALID_FILE_TYPE` (GIF, extensión que no coincide, texto con nombre y tipo de PDF, PNG renombrado a `.jpg`, archivo vacío), `FILE_TOO_LARGE`, `UNEXPECTED_FILE_FIELD` (otro campo y dos archivos), `INVALID_DOCUMENT_TYPE` (inexistente y ausente), `USER_NOT_FOUND`, `DELIVERY_NOT_FOUND`, `DOCUMENT_NOT_FOUND` (id ajeno y archivo borrado del disco). En cada error se comprueba que **no quedó ningún archivo** en `uploads/test/` |
 | `logger.test.js` | `GET /api/loggerTest` | niveles registrados y omitidos con `NODE_ENV=test` | `ROUTE_NOT_FOUND` (método inexistente) |
 | `docs.test.js` | `GET /api/docs/`, `GET /api/docs.json` | Swagger UI responde HTML; la spec tiene versión, tags y los endpoints principales; las cargas están documentadas como `multipart/form-data` con el campo del archivo | `ROUTE_NOT_FOUND` (método inexistente) |
-| `app.test.js` | `GET /api/health`, rutas inexistentes | health check | `ROUTE_NOT_FOUND` (dentro y fuera de `/api`), `BAD_REQUEST` (URL mal codificada) |
+| `app.test.js` | `GET /api/health`, rutas inexistentes | health check con estado, entorno, uptime, hora y conexión a MongoDB, sin datos sensibles; sin header `X-Powered-By` | `ROUTE_NOT_FOUND` (dentro y fuera de `/api`), `BAD_REQUEST` (URL mal codificada) |
 
 **Qué valida cada test.** No alcanza con que el endpoint responda:
 
@@ -1044,6 +1046,8 @@ tests/
 ├── uploads.test.js       # carga y descarga de documentos y comprobantes
 ├── logger.test.js
 ├── docs.test.js          # Swagger y coherencia con la API
+├── production.test.js    # la app con las opciones de producción: sin endpoints internos, Swagger filtrado o apagado
+├── config.test.js        # validación de las variables de entorno
 └── app.test.js           # health y rutas inexistentes
 ```
 

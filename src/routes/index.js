@@ -7,14 +7,26 @@ import deliveriesRouter from './deliveries.router.js';
 import mocksRouter from './mocks.router.js';
 import loggerRouter from './logger.router.js';
 
-const router = Router();
+// Rutas internas: herramientas de desarrollo y testing, no funcionalidades del negocio.
+// Solo se montan si `internalEndpoints` es true (fuera de producción): en producción no existen
+// y responden 404 ROUTE_NOT_FOUND como cualquier ruta inexistente.
+export const INTERNAL_ROUTES = Object.freeze({
+  '/mocks': mocksRouter,
+  '/loggerTest': loggerRouter,
+});
 
-router.use('/health', healthRouter);
-router.use('/products', productsRouter);
-router.use('/users', usersRouter);
-router.use('/orders', ordersRouter);
-router.use('/deliveries', deliveriesRouter);
-router.use('/mocks', mocksRouter);
-router.use('/loggerTest', loggerRouter);
+export const createApiRouter = ({ internalEndpoints }) => {
+  const router = Router();
 
-export default router;
+  router.use('/health', healthRouter);
+  router.use('/products', productsRouter);
+  router.use('/users', usersRouter);
+  router.use('/orders', ordersRouter);
+  router.use('/deliveries', deliveriesRouter);
+
+  if (internalEndpoints) {
+    Object.entries(INTERNAL_ROUTES).forEach(([path, internalRouter]) => router.use(path, internalRouter));
+  }
+
+  return router;
+};
