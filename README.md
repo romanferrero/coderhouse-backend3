@@ -1,10 +1,11 @@
 # ShipNow API
 
-API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y repartidores), **pedidos** y **entregas**, con arquitectura por capas (**Router → Controller → Service → Repository → Model**), configuración de entorno centralizada, un **módulo de mocking** para generar y cargar datos de prueba, una **capa centralizada de manejo de errores**, **logging con Winston**, **documentación interactiva con Swagger**, una **suite de tests funcionales** con Mocha, Chai y Supertest y **carga de documentos y comprobantes con Multer**.
+API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y repartidores), **pedidos** y **entregas**, con arquitectura por capas (**Router → Controller → Service → Repository → Model**), configuración de entorno centralizada, un **módulo de mocking** para generar y cargar datos de prueba, una **capa centralizada de manejo de errores**, **logging con Winston**, **documentación interactiva con Swagger**, una **suite de tests funcionales** con Mocha, Chai y Supertest y **carga de documentos y comprobantes con Multer**, lista para producción con **health check, configuración validada por entorno y Docker**.
 
-> Pre-entregas Módulo 1 (arquitectura por capas), Módulo 2 (mocking y carga de datos), Módulo 3 (manejo profesional de errores), Módulo 4 (logging y monitoreo básico), Módulo 5 (documentación de API con Swagger), Módulo 6 (testing funcional con Mocha, Chai y Supertest) y Módulo 7 (carga de archivos, documentos y comprobantes) — Backend III (Coderhouse).
+> Pre-entregas Módulo 1 (arquitectura por capas), Módulo 2 (mocking y carga de datos), Módulo 3 (manejo profesional de errores), Módulo 4 (logging y monitoreo básico), Módulo 5 (documentación de API con Swagger), Módulo 6 (testing funcional con Mocha, Chai y Supertest) Módulo 7 (carga de archivos, documentos y comprobantes) y Módulo 8 (performance, escalabilidad y Docker) — Backend III (Coderhouse).
 
 - [Cómo correrlo localmente](#cómo-correrlo-localmente)
+- [Producción y Docker](#producción-y-docker)
 - [Documentación de la API (Swagger)](#documentación-de-la-api-swagger)
 - [Manejo de errores](#manejo-de-errores)
 - [Logging](#logging)
@@ -26,6 +27,7 @@ API REST de ShipNow para la gestión de **productos**, **usuarios** (clientes y 
 - swagger-jsdoc + swagger-ui-express (documentación OpenAPI 3 interactiva)
 - multer (carga de archivos `multipart/form-data`)
 - Mocha + Chai + Supertest (tests funcionales, solo en desarrollo)
+- Docker + Docker Compose (imagen `node:22-alpine`)
 
 ## Cómo correrlo localmente
 
@@ -74,6 +76,181 @@ Error: [config] Faltan variables de entorno obligatorias: MONGODB_URI. Revisá t
     ...
 ```
 
+## Producción y Docker
+
+Resumen de cómo se prepara ShipNow para ejecutarse fuera de la máquina de desarrollo: variables por entorno validadas al arrancar, health check, optimizaciones de performance, criterio sobre los endpoints internos y la API contenerizada con Docker.
+
+### Variables de entorno
+
+Hay un archivo de variables por entorno. La app elige cuál leer según `NODE_ENV` (`src/config/env.config.js`, el único lugar del código que lee `process.env`), y **dotenv nunca pisa una variable que ya existe**: en Docker las variables llegan con `--env-file` o del entorno, y no hace falta ningún archivo dentro de la imagen.
+
+| Entorno | `NODE_ENV` | Archivo que lee | Plantilla versionada |
+| ------- | ---------- | --------------- | -------------------- |
+| Desarrollo | `development` | `.env` | `.env.example` |
+| Testing | `test` (lo fija `tests/setup.js`) | `.env.test` | `.env.test.example` |
+| Producción | `production` | `.env.production` (local) o las variables del contenedor | `.env.production.example` |
+
+| Variable | Obligatoria | Descripción | Desarrollo | Producción (Docker) |
+| -------- | ----------- | ----------- | ---------- | ------------------- |
+| `PORT` | **Sí** | Puerto HTTP (1–65535) | `8080` | `8080` (puerto interno del contenedor) |
+| `MONGODB_URI` | **Sí** | URI de MongoDB, el servicio externo de la API. Con credenciales: **nunca se sube** | `mongodb://localhost:27017/shipnow` | `mongodb+srv://…` (Atlas) o `mongodb://host.docker.internal:27017/shipnow` |
+| `NODE_ENV` | **Sí** | `development`, `production` o `test` | `development` | `production` (valor por defecto de la imagen) |
+| `LOG_LEVEL` | No | Nivel mínimo de logs: `fatal`, `error`, `warning`, `info`, `http` o `debug`. Vacío = el del entorno | vacío (`debug`) | `info` |
+| `PUBLIC_URL` | No | URL pública de la API, la que muestra Swagger. Vacío = `http://localhost:<PORT>` | vacío | `https://api.mi-dominio.com` |
+| `SWAGGER_ENABLED` | No | `true` / `false`: publica o no `/api/docs`. Vacío = `true` | vacío | `true` |
+
+No hay JWT ni otros secretos: la API todavía no tiene autenticación (ver [Swagger](#documentación-de-la-api-swagger)). El único dato sensible es `MONGODB_URI`, y no está escrito en el código: solo en los archivos `.env*` que no se versionan.
+
+**Validación al arrancar.** Antes de conectar a MongoDB y de abrir el puerto se validan todas las variables. Si falta una obligatoria, o alguna tiene un valor inválido (puerto fuera de rango, entorno desconocido, URI sin `mongodb://`, `LOG_LEVEL` inexistente, `PUBLIC_URL` que no es una URL, `SWAGGER_ENABLED` distinto de `true`/`false`), la app **no arranca**: lo registra como `fatal` con un mensaje que dice qué variable revisar y termina con código 1. Si faltan varias, las informa todas juntas:
+
+```
+$ docker run --rm shipnow-api            # sin --env-file: falta MONGODB_URI
+2026-11-19 12:27:57 [fatal]   No se pudo iniciar la aplicación: [config] Faltan variables de entorno obligatorias: MONGODB_URI. Revisá tu archivo .env.production (podés tomar .env.production.example como referencia) o las variables que le pasás al contenedor.
+```
+
+### Correr la API localmente
+
+Igual que en [Cómo correrlo localmente](#cómo-correrlo-localmente): `cp .env.example .env`, completar los valores, `npm install` y `npm run dev` (o `npm start`). Para probar la configuración de producción sin Docker: `cp .env.production.example .env.production`, completarlo y `NODE_ENV=production npm start` (en PowerShell: `$env:NODE_ENV="production"; npm start`).
+
+### Correr los tests
+
+```bash
+cp .env.test.example .env.test
+npm install --include=dev
+npm test
+```
+
+Detalle en [Testing](#testing). Los tests usan su propia base (`shipnow_test`) y su propia carpeta de uploads, y además cubren el comportamiento de producción: `tests/production.test.js` arma la app con las opciones de producción y `tests/config.test.js` valida las variables de entorno.
+
+### Swagger
+
+[http://localhost:8080/api/docs](http://localhost:8080/api/docs) (UI) y `/api/docs.json` (spec), tanto en local como en el contenedor. El servidor que figura en la documentación es `PUBLIC_URL`. Ver [Endpoints internos](#endpoints-internos-en-producción) para qué cambia en producción.
+
+### Health check — `GET /api/health`
+
+```json
+{ "status": "ok", "environment": "production", "uptime": 3605, "timestamp": "2026-11-19T15:04:05.123Z", "database": "connected" }
+```
+
+| Campo | Qué informa |
+| ----- | ----------- |
+| `status` | `ok` si la API puede atender requests; `error` si perdió la conexión con MongoDB |
+| `environment` | `NODE_ENV` |
+| `uptime` | Segundos desde que arrancó el proceso |
+| `timestamp` | Hora del servidor (ISO 8601, UTC) |
+| `database` | Estado de la conexión con MongoDB: `connected`, `connecting`, `disconnecting` o `disconnected` |
+
+Responde **`200`** si está todo bien y **`503`** si MongoDB no está conectado: así lo puede usar un balanceador o el `HEALTHCHECK` de Docker para saber si mandarle tráfico. Cuando MongoDB vuelve, el driver se reconecta solo y el health check vuelve a `200`. **No expone información sensible**: ni la URI ni el host de la base, ni versiones, ni variables de entorno (lo comprueba `tests/app.test.js`).
+
+### Endpoints internos en producción
+
+| Endpoint | Desarrollo y test | Producción | Por qué |
+| -------- | ----------------- | ---------- | ------- |
+| `/api/mocks/*` | Disponible | **Deshabilitado** (no se monta: `404 ROUTE_NOT_FOUND`) | Los `POST`/`DELETE` escriben y borran datos de prueba en la base, y los `GET` generan hasta 100 registros por request: son herramientas de desarrollo, no del negocio. Además, los de escritura siguen respondiendo `403 MOCK_SEED_FORBIDDEN` si alguna vez llegan a ejecutarse en producción (segunda barrera) |
+| `/api/loggerTest` | Disponible | **Deshabilitado** (`404`) | Escribe a propósito logs de `error` y `fatal`: en producción ensuciaría `error.log` y dispararía falsas alarmas |
+| `/api/docs`, `/api/docs.json` | Disponible | **Disponible**, sin las rutas ni los tags de Mocks y Logger. Se puede apagar con `SWAGGER_ENABLED=false` | La documentación es la referencia para quien consume la API y no expone secretos. Muestra solo lo que existe en ese entorno |
+| `/api/health` | Disponible | Disponible | Es para monitoreo; no expone datos sensibles |
+
+El criterio vive en un solo lugar: `src/config/env.config.js` define `internalEndpointsEnabled` (`true` salvo con `NODE_ENV=production`) y `swaggerEnabled`, y `createApp()` (`src/app.js`) monta o no las rutas internas (`INTERNAL_ROUTES` en `src/routes/index.js`) y filtra la spec de Swagger con esos mismos prefijos.
+
+### Optimizaciones de performance
+
+| Qué | Cómo |
+| --- | ---- |
+| **Listados paginados** | `GET /api/users`, `/api/orders`, `/api/deliveries` y `/api/products` devuelven páginas: `limit` por defecto **10** y como máximo **100** (`PAGINATION.MAX_LIMIT`: `?limit=1000` devuelve 100), con filtros por rol, estado, prioridad o categoría. Ninguno devuelve la colección completa |
+| **Payloads chicos** | Proyecciones en los repositories: nunca sale el hash de la contraseña, y del cliente o repartidor populado solo van los datos de contacto. Los listados de usuarios y entregas **no incluyen** `documents` / `proofs` (crecen con cada carga): se consultan por entidad con `GET /:uid/documents` y `GET /:did/proofs` |
+| **Consultas con índices** | Índices en los campos por los que se filtra y ordena (`createdAt`, `role`, `status`, `priority`, `category`, `customer`, `courier`), además de los únicos (`email`, `code`, `trackingCode`, `order`). Sin ellos, cada página obliga a MongoDB a recorrer y ordenar toda la colección |
+| **Consultas eficientes** | `.lean()` en las lecturas (objetos planos, sin documentos de Mongoose), el listado y su `countDocuments` en paralelo (`Promise.all`), y `serverSelectionTimeoutMS` de 5 s para que una base caída falle rápido |
+| **Body acotado** | `express.json` y `urlencoded` con límite explícito de **100 KB** (`BODY_LIMIT`): un body mayor responde `413 PAYLOAD_TOO_LARGE` sin procesarse |
+| **Carga de archivos acotada** | 5 MB por archivo, 1 archivo por carga, solo PDF/JPG/PNG (validados por extensión, mimetype y primeros bytes), y como máximo **10 archivos por usuario o por entrega** (`MAX_DOCUMENTS_PER_ENTITY`, `409 DOCUMENT_LIMIT_REACHED`) |
+| **Logs según el entorno** | En producción el nivel es `info`: no se registra el `debug` ni la línea por request (`http`). Los archivos rotan por tamaño y por fecha y se borran a los 14 días ([Logging](#logging)) |
+| **Sin bloquear el Event Loop** | Todo el I/O es asincrónico: MongoDB, el disco (`fs/promises` para guardar, leer la firma, borrar y descargar archivos con streams) y el hash de contraseñas (`bcrypt.hash` asincrónico). Lo único sincrónico es la lectura de los YAML de Swagger, que se hace **una sola vez al arrancar** |
+| **Cierre ordenado** | Con `SIGTERM` (lo que manda `docker stop`) o `SIGINT` (Ctrl+C) el servidor deja de aceptar conexiones, termina las requests en curso y cierra MongoDB antes de salir |
+
+### Construir la imagen
+
+```bash
+docker build -t shipnow-api .
+```
+
+El [`Dockerfile`](Dockerfile):
+
+| Paso | Por qué |
+| ---- | ------- |
+| `FROM node:22-alpine` | Imagen oficial de Node LTS, liviana (el proyecto pide Node ≥ 20) |
+| `ENV NODE_ENV=production PORT=8080` | Producción por defecto. `MONGODB_URI` no tiene valor por defecto: hay que pasarla |
+| `COPY package.json package-lock.json` + `RUN npm ci --omit=dev` | Instala exactamente las versiones del lock, **sin las devDependencies** (Mocha, Chai, Supertest). Al copiar primero solo los manifiestos, Docker reutiliza esta capa mientras no cambien las dependencias |
+| `COPY src ./src` | Solo el código de la app |
+| `RUN mkdir -p logs uploads && chown node:node …` + `USER node` | La app corre con el usuario sin privilegios de la imagen oficial, no como root, y puede escribir sus logs y uploads |
+| `EXPOSE 8080` | El puerto de la API dentro del contenedor |
+| `HEALTHCHECK` | Docker consulta `/api/health` cada 30 s y marca el contenedor como `healthy` o `unhealthy` |
+| `CMD ["npm", "start"]` | El mismo script que en local (`node src/server.js`). npm le reenvía a la app el `SIGTERM` de `docker stop` para el cierre ordenado |
+
+### Ejecutar el contenedor
+
+**Opción A — con un archivo de variables (`--env-file`)**, apuntando a un MongoDB propio (Atlas, o el instalado en la máquina):
+
+```bash
+cp .env.production.example .env.production   # completar MONGODB_URI
+docker run -d --name shipnow-api -p 8080:8080 --env-file .env.production \
+  -v shipnow-logs:/app/logs -v shipnow-uploads:/app/uploads shipnow-api
+```
+
+- Para usar el MongoDB instalado en la máquina, la URI es `mongodb://host.docker.internal:27017/shipnow`: dentro del contenedor, `localhost` es el propio contenedor.
+- En lugar de `--env-file` se pueden pasar las variables una por una (`-e MONGODB_URI=...`) o desde el orquestador o el servicio de hosting.
+- Para que la API quede en otro puerto de la máquina se cambia el mapeo, no `PORT`: `-p 3000:8080` → `http://localhost:3000`.
+
+**Opción B — con Docker Compose**, que levanta la API y un MongoDB propio sin configurar nada:
+
+```bash
+docker compose up -d --build
+docker compose logs -f api      # ver los logs
+docker compose down             # detener (agregar -v para borrar también los datos y los archivos)
+```
+
+[`docker-compose.yml`](docker-compose.yml) define las variables directamente (sin datos sensibles: el MongoDB es interno a la red de Docker y no se publica), espera a que MongoDB esté sano antes de arrancar la API y guarda base, logs y uploads en volúmenes.
+
+**Probar que funciona:**
+
+```bash
+curl http://localhost:8080/api/health                 # {"status":"ok","environment":"production",...}
+# Swagger UI: abrir http://localhost:8080/api/docs en el navegador
+curl -X POST http://localhost:8080/api/products -H "Content-Type: application/json" \
+  -d '{"title":"Caja chica","code":"BOX-S","price":1500,"stock":10,"category":"embalaje"}'
+curl "http://localhost:8080/api/products?limit=5"
+curl http://localhost:8080/api/mocks/users            # 404 ROUTE_NOT_FOUND: endpoint interno, deshabilitado en producción
+docker ps                                             # STATUS: Up … (healthy)
+docker logs -f shipnow-api                            # logs de la API
+docker stop shipnow-api                               # cierre ordenado (SIGTERM)
+```
+
+### Puerto
+
+La API escucha en **`8080`** (`PORT`), en local y dentro del contenedor (`EXPOSE 8080`). Desde la máquina se accede por el puerto que se mapee con `-p` (`8080` en los ejemplos).
+
+### Qué no se sube al repositorio (ni entra en la imagen)
+
+| Archivo o carpeta | `.gitignore` | `.dockerignore` | Por qué |
+| ----------------- | :----------: | :-------------: | ------- |
+| `.env`, `.env.test`, `.env.production` | ✔ | ✔ | Tienen la URI real de la base, con credenciales. Solo se versionan los `.example` |
+| `node_modules/` | ✔ | ✔ | Se instala con `npm install` / `npm ci` (en la imagen, sin devDependencies) |
+| `logs/` (salvo `logs/.gitkeep`), `*.log` | ✔ | ✔ | Los genera la app en tiempo de ejecución |
+| `uploads/` | ✔ | ✔ | Archivos de los usuarios (documentos de identidad): datos personales |
+| `coverage/`, `.nyc_output/`, `tmp/`, `*.tmp` | ✔ | ✔ | Reportes y archivos temporales |
+| `.git/`, `tests/`, `.mocharc.json`, `_base/`, `README.md`, archivos de Docker | — | ✔ | No los necesita la app para ejecutarse: la imagen solo lleva `package*.json`, las dependencias de producción y `src/` |
+
+### Logs en el contenedor
+
+- La consola es la salida principal: **`docker logs shipnow-api`** (o `docker compose logs api`) muestra todo lo que registra la app desde el nivel `info`, sin colores.
+- Los archivos (`error.log` y `app-AAAA-MM-DD.log`, con la misma rotación que en local) se escriben en `/app/logs`. Se pierden al borrar el contenedor salvo que se monte un volumen (`-v shipnow-logs:/app/logs`, como en los ejemplos).
+- Para ver una línea por request en producción sin cambiar el código: `LOG_LEVEL=http`.
+
+### Uploads en el contenedor
+
+- Los archivos se guardan en `/app/uploads/users` y `/app/uploads/deliveries`, **fuera del repositorio** (`.gitignore`) y fuera de la imagen (`.dockerignore`).
+- El sistema de archivos de un contenedor es **efímero**: sin el volumen `-v shipnow-uploads:/app/uploads`, los documentos se pierden al recrear el contenedor mientras sus metadatos siguen en MongoDB (la descarga respondería `404 DOCUMENT_NOT_FOUND`).
+- Criterio de almacenamiento: el disco del servidor sirve para este alcance (un solo contenedor, con volumen), con límites de tamaño, tipo y cantidad por entidad, y los archivos se borran junto con su usuario o con los datos de prueba. Para escalar a varias instancias o a un hosting sin disco persistente, el paso siguiente es un almacenamiento de objetos (S3, Cloudinary): solo cambiaría `diskStorage` en `src/config/multer.config.js` y la descarga.
+
 ## Estructura del proyecto
 
 ```
@@ -96,11 +273,15 @@ src/
 ├── docs/                  # documentación OpenAPI: configuración de Swagger, paths y components en YAML
 ├── db/                    # conexión a MongoDB
 ├── utils/                 # paginación, rutas de archivos, helpers
-├── app.js                 # instancia de Express (monta /api/docs y /api); no abre ningún puerto
-└── server.js              # punto de entrada: conecta la DB y levanta el servidor
+├── app.js                 # createApp(): arma Express (monta /api/docs y /api); no abre ningún puerto
+└── server.js              # punto de entrada: conecta la DB, levanta el servidor y lo cierra ordenado (SIGTERM/SIGINT)
 tests/                     # tests funcionales (ver Testing)
 logs/                      # archivos de log generados (ignorados por Git, salvo .gitkeep)
 uploads/                   # archivos subidos (ignorada por Git, ver Carga de archivos)
+.env.example               # plantillas de variables: desarrollo, testing (.env.test.example) y producción (.env.production.example)
+Dockerfile                 # imagen de la API (ver Producción y Docker)
+.dockerignore              # lo que no entra en la imagen
+docker-compose.yml         # API + MongoDB con un solo comando
 ```
 
 ### Flujo de una request
@@ -716,7 +897,7 @@ uploads/              # ignorada por Git: los archivos subidos nunca van al repo
 └── test/             # solo con NODE_ENV=test (users/ y deliveries/); npm test la vacía al empezar y al terminar
 ```
 
-`uploads/` está en `.gitignore` y se crea sola con la primera carga.
+`uploads/` está en `.gitignore` y en `.dockerignore`, y se crea sola con la primera carga. En Docker conviene montarla como volumen (ver [Uploads en el contenedor](#uploads-en-el-contenedor)).
 
 ### Qué se guarda en MongoDB
 

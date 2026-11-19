@@ -1,0 +1,42 @@
+# Levanta la API y un MongoDB propio, sin instalar nada más que Docker:
+#   docker compose up -d --build
+# La API queda en http://localhost:8080 (health: /api/health, Swagger: /api/docs).
+# No hace falta ningún archivo .env: las variables están acá y no tienen datos sensibles
+# (el MongoDB es local al compose y no se publica fuera de la red de Docker).
+
+services:
+  api:
+    build: .
+    image: shipnow-api
+    container_name: shipnow-api
+    ports:
+      - '8080:8080'
+    environment:
+      PORT: 8080
+      NODE_ENV: production
+      MONGODB_URI: mongodb://mongo:27017/shipnow
+      LOG_LEVEL: info
+    volumes:
+      - shipnow-logs:/app/logs
+      - shipnow-uploads:/app/uploads
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    container_name: shipnow-mongo
+    volumes:
+      - shipnow-mongo-data:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  shipnow-logs:
+  shipnow-uploads:
+  shipnow-mongo-data:

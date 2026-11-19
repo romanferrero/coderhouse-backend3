@@ -1,0 +1,40 @@
+# Lo que nunca entra en el contexto de build de Docker (ni, por lo tanto, en la imagen).
+
+# Dependencias: se instalan dentro de la imagen con npm ci
+node_modules/
+npm-debug.log*
+
+# Variables de entorno: tienen credenciales. Se pasan al contenedor con --env-file
+.env
+.env.*
+
+# Git y configuración del editor o de herramientas
+.git/
+.gitignore
+.vscode/
+.idea/
+.claude/
+
+# Logs y archivos subidos generados por la app (en el contenedor van a volúmenes)
+logs/
+*.log
+uploads/
+
+# Tests, cobertura y archivos temporales
+tests/
+.mocharc.json
+coverage/
+.nyc_output/
+tmp/
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Material del curso que no es parte de la app
+_base/
+
+# Archivos de Docker y documentación
+Dockerfile
+.dockerignore
+docker-compose.yml
+README.md

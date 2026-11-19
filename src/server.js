@@ -3,6 +3,10 @@ import logger from './logger/index.js';
 // Se completa recién cuando se carga el módulo de la conexión: si la config es inválida
 // nunca se llega a abrir una conexión y no hay nada que cerrar.
 let disconnectDB = null;
+let server = null;
+
+// Si el cierre no termina en este tiempo (ej. una request que no responde), se corta igual.
+const SHUTDOWN_TIMEOUT_MS = 10_000;
 
 // La config y la app se importan recién acá: si falta o es inválida una variable de entorno,
 // el error queda registrado como fatal (consola y logs/error.log) en lugar de cortar el
@@ -16,10 +20,40 @@ const start = async () => {
   await connection.connectDB();
   await new Promise((resolve, reject) => {
     // Express 5 le pasa al callback el error de listen (ej. puerto ocupado).
-    app.listen(config.port, (error) => (error ? reject(error) : resolve()));
+    server = app.listen(config.port, (error) => (error ? reject(error) : resolve()));
   });
   logger.info(`Servidor ShipNow escuchando en el puerto ${config.port} (${config.nodeEnv})`);
 };
+
+// Cierre ordenado: docker stop (y los orquestadores) mandan SIGTERM; Ctrl+C manda SIGINT.
+// Se deja de aceptar conexiones, se terminan las requests en curso y se cierra MongoDB.
+let shuttingDown = false;
+const shutdown = async (signal) => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info(`Señal ${signal} recibida: cerrando el servidor`);
+
+  const forceExit = setTimeout(() => {
+    logger.error(`El cierre tardó más de ${SHUTDOWN_TIMEOUT_MS / 1000} s: se fuerza la salida`);
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS);
+  forceExit.unref();
+
+  try {
+    if (server) {
+      server.closeIdleConnections();
+      await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    }
+    await disconnectDB?.();
+    logger.info('Servidor detenido');
+  } catch (error) {
+    logger.error(`Error durante el cierre: ${error.message}`, { stack: error.stack });
+    process.exitCode = 1;
+  }
+};
+
+process.once('SIGTERM', () => shutdown('SIGTERM'));
+process.once('SIGINT', () => shutdown('SIGINT'));
 
 // Si el arranque falla después de conectar a MongoDB (ej. puerto ocupado), la conexión
 // abierta mantendría vivo el proceso: se cierra para que termine con código 1.
