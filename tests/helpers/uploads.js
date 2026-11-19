@@ -19,7 +19,7 @@ export const listUploads = (folder) => fs.readdir(path.join(UPLOADS_ROOT, folder
 export const absoluteUploadPath = (storedPath) => path.join(UPLOADS_ROOT, '..', '..', storedPath);
 
 // Archivos de prueba armados en memoria: no hace falta tener fixtures en el repositorio.
-// Multer valida el mimetype y la extensión, no el contenido.
+// Empiezan con la firma real de su tipo (%PDF-, FF D8 FF, 89 PNG…), que la API verifica.
 export const pdfFile = (filename = 'dni.pdf') => ({
   content: Buffer.from(`%PDF-1.4\n% Documento de prueba de ShipNow: ${filename}\n%%EOF\n`),
   options: { filename, contentType: 'application/pdf' },
@@ -30,7 +30,26 @@ export const jpgFile = (filename = 'entrega.jpg') => ({
   options: { filename, contentType: 'image/jpeg' },
 });
 
-export const gifFile = (filename = 'animacion.gif') => ({
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+export const pngFile = (filename = 'firma.png') => ({
+  content: Buffer.from([...PNG_SIGNATURE, ...Buffer.from(`Imagen de prueba: ${filename}`)]),
+  options: { filename, contentType: 'image/png' },
+});
+
+// Nombre y tipo declarado válidos, pero el contenido es texto plano: solo lo detecta la firma.
+export const fakePdfFile = (filename = 'dni.pdf') => ({
+  content: Buffer.from('Esto no es un PDF, es un archivo de texto con otro nombre.'),
+  options: { filename, contentType: 'application/pdf' },
+});
+
+// Un PNG real enviado con nombre y tipo de JPG.
+export const pngDisguisedAsJpgFile = (filename = 'foto.jpg') => ({
+  content: pngFile().content,
+  options: { filename, contentType: 'image/jpeg' },
+});
+
+export const gifFile =(filename = 'animacion.gif') => ({
   content: Buffer.from('GIF89a archivo de prueba'),
   options: { filename, contentType: 'image/gif' },
 });

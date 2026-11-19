@@ -3,10 +3,11 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import multer from 'multer';
 import logger from '../logger/index.js';
-import { UPLOADS_ROOT } from '../utils/files.js';
+import { UPLOADS_ROOT, removeFile } from '../utils/files.js';
 import {
   AppError,
   ERROR_DICTIONARY as ERRORS,
+  FileContentMismatchError,
   FileRequiredError,
   FileTooLargeError,
   FileUploadFailedError,
@@ -38,6 +39,16 @@ export const ALLOWED_FILE_TYPES = Object.freeze({
   'image/png': Object.freeze(['.png']),
 });
 const ALLOWED_EXTENSIONS = Object.values(ALLOWED_FILE_TYPES).flat();
+
+// El mimetype y la extensión los declara el cliente, así que no alcanzan: un archivo cualquiera
+// llamado x.pdf y enviado como application/pdf pasaría. Por eso, además, se leen los primeros bytes
+// del archivo guardado (su firma o "magic number") y tienen que corresponder al tipo declarado.
+const FILE_SIGNATURES = Object.freeze({
+  'application/pdf': Buffer.from('%PDF-'),
+  'image/jpeg': Buffer.from([0xff, 0xd8, 0xff]),
+  'image/png': Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+});
+const SIGNATURE_LENGTH = Math.max(...Object.values(FILE_SIGNATURES).map((signature) => signature.length));
 
 export const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
@@ -78,6 +89,44 @@ const fileFilter = (req, file, cb) => {
   cb(new InvalidFileTypeError({ fileName: file.originalname, mimeType: file.mimetype, allowed: ALLOWED_EXTENSIONS }));
 };
 
+// ---------- Validación del contenido ----------
+
+const readHeader = async (filePath) => {
+  const handle = await fs.open(filePath, 'r');
+  try {
+    const { buffer, bytesRead } = await handle.read(Buffer.alloc(SIGNATURE_LENGTH), 0, SIGNATURE_LENGTH, 0);
+    return buffer.subarray(0, bytesRead);
+  } finally {
+    await handle.close();
+  }
+};
+
+// Tipo real del archivo según su firma, o null si no es ninguno de los aceptados.
+const detectFileType = (header) =>
+  Object.keys(FILE_SIGNATURES).find((type) =>
+    header.subarray(0, FILE_SIGNATURES[type].length).equals(FILE_SIGNATURES[type])
+  ) ?? null;
+
+// Se ejecuta con el archivo ya guardado (Multer no deja ver el contenido antes). Si no corresponde
+// al tipo declarado, o no se puede leer, el archivo se borra antes de responder el error.
+const verifyFileContent = async (req, file) => {
+  let detected;
+  try {
+    detected = detectFileType(await readHeader(file.path));
+  } catch (error) {
+    await removeFile(file.path);
+    throw error;
+  }
+  if (detected === file.mimetype) return;
+
+  await removeFile(file.path);
+  logger.warning(
+    `Intento de carga con un contenido que no coincide con el tipo declarado en ${req.method} ${req.originalUrl}: ` +
+      `"${file.originalname}" (declarado ${file.mimetype}, detectado ${detected ?? 'desconocido'})`
+  );
+  throw new FileContentMismatchError({ fileName: file.originalname, mimeType: file.mimetype, detected });
+};
+
 // ---------- Errores de carga ----------
 
 // Traduce lo que devuelve Multer a errores del diccionario, para que el errorHandler responda con
@@ -112,15 +161,21 @@ const toUploadError = (error, { field }) => {
 
 // Acepta un único archivo en el campo del destino. Después de Multer, req.file tiene los datos del
 // archivo guardado y req.body los campos de texto. Si no llegó ningún archivo (o la request no es
-// multipart/form-data) responde FILE_REQUIRED antes de llegar al controller.
+// multipart/form-data) responde FILE_REQUIRED, y si el contenido no corresponde al tipo declarado
+// responde INVALID_FILE_TYPE, en los dos casos antes de llegar al controller.
 const createUploader = (target) => {
   const upload = multer({ storage: createStorage(target.folder), fileFilter, limits: LIMITS }).single(target.field);
 
   return (req, res, next) => {
-    upload(req, res, (error) => {
+    upload(req, res, async (error) => {
       if (error) return next(toUploadError(error, target));
       if (!req.file) return next(new FileRequiredError(target.field));
-      next();
+      try {
+        await verifyFileContent(req, req.file);
+        next();
+      } catch (contentError) {
+        next(toUploadError(contentError, target));
+      }
     });
   };
 };

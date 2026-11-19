@@ -264,7 +264,7 @@ Cada error que pasa por el middleware queda registrado con el logger: los `4xx` 
 | `ORDER_COURIER_REQUIRED`         | 409  | Se intenta pasar a `ASSIGNED`, `IN_TRANSIT` o `DELIVERED` un pedido sin repartidor |
 | `DELIVERY_NOT_FOUND`             | 404  | Entrega inexistente |
 | `FILE_REQUIRED`                  | 400  | No llegó ningún archivo en el campo esperado (o la request no es `multipart/form-data`) |
-| `INVALID_FILE_TYPE`              | 400  | El archivo no es PDF, JPG o PNG, o su extensión no coincide con el tipo declarado |
+| `INVALID_FILE_TYPE`              | 400  | El archivo no es PDF, JPG o PNG, su extensión no coincide con el tipo declarado, o su contenido (primeros bytes) no es de ese tipo |
 | `FILE_TOO_LARGE`                 | 413  | El archivo supera los 5 MB |
 | `UNEXPECTED_FILE_FIELD`          | 400  | El archivo llegó en otro campo, o llegó más de uno |
 | `INVALID_DOCUMENT_TYPE`          | 400  | `documentType` ausente (en documentos de usuario) o fuera de los tipos permitidos |
@@ -399,7 +399,7 @@ Los datos extra del log (por ejemplo, los `details` del error) se agregan en JSO
 | --------- | --------- | -------------------------- |
 | `fatal`   | 0         | La app no puede arrancar: configuración inválida o falla en la conexión inicial a MongoDB |
 | `error`   | 1         | Errores inesperados del servidor (`5xx`, incluido `FILE_UPLOAD_FAILED`), falla al deshacer una carga de mocks, errores de la conexión a MongoDB, documento registrado sin su archivo en disco |
-| `warning` | 2         | Errores esperados o de negocio (`4xx`): datos inválidos, cantidad inválida en mocks, pedido no encontrado, ruta inexistente, intento de subir un tipo de archivo no permitido; MongoDB desconectado; carga de mocks deshecha |
+| `warning` | 2         | Errores esperados o de negocio (`4xx`): datos inválidos, cantidad inválida en mocks, pedido no encontrado, ruta inexistente, intento de subir un tipo de archivo no permitido o con un contenido que no coincide con su tipo; MongoDB desconectado; carga de mocks deshecha |
 | `info`    | 3         | Eventos normales importantes: servidor iniciado, conexión a MongoDB, usuario registrado o eliminado, cambio de rol, producto creado o dado de baja, carga y limpieza de datos de prueba (pedidos creados), documento o comprobante subido (ver [Logging de las cargas](#logging-de-las-cargas)) |
 | `http`    | 4         | Una línea por request: método, ruta, status y duración (`requestLogger`) |
 | `debug`   | 5         | Información de desarrollo: generación de datos simulados en `GET /api/mocks/*` |
@@ -675,7 +675,10 @@ La API recibe **documentos de usuario** y **comprobantes de entrega** como `mult
 | Archivos por carga               | 1                     | 1                       |
 | Carpeta                          | `uploads/users/`      | `uploads/deliveries/`   |
 
-`documentType` acepta minúsculas (`id_card` = `ID_CARD`). El tipo de archivo se valida con el **mimetype y la extensión juntos** (`application/pdf` → `.pdf`, `image/jpeg` → `.jpg`/`.jpeg`, `image/png` → `.png`): un `.exe` enviado como `application/pdf`, o un PDF renombrado a `.gif`, se rechaza.
+`documentType` acepta minúsculas (`id_card` = `ID_CARD`). El tipo de archivo se valida en dos pasos:
+
+1. **Mimetype y extensión juntos** (`application/pdf` → `.pdf`, `image/jpeg` → `.jpg`/`.jpeg`, `image/png` → `.png`): un `.exe` enviado como `application/pdf`, o un PDF renombrado a `.gif`, se rechaza antes de guardar nada.
+2. **El contenido**: el mimetype y la extensión los declara el cliente, así que no alcanzan. Con el archivo ya guardado se leen sus primeros bytes (la firma o *magic number*) y tienen que ser los del tipo declarado: `%PDF-` para PDF, `FF D8 FF` para JPG y `89 50 4E 47 0D 0A 1A 0A` para PNG. Un texto llamado `dni.pdf` y enviado como `application/pdf`, un PNG renombrado a `.jpg` o un archivo vacío se rechazan, y el archivo se borra antes de responder.
 
 ### Configuración de Multer
 
@@ -690,7 +693,7 @@ router.post('/:uid/documents', uploadUserDocument, userController.uploadDocument
 | ---------- | ---- |
 | Dónde se guardan | `diskStorage` con una subcarpeta de `uploads/` por tipo de carga (`UPLOAD_TARGETS`). La carpeta se crea si no existe |
 | Cómo se nombran | `<fecha en ms>-<UUID>.<extensión>`, por ejemplo `1794778518037-7e224bba-e20a-42c4-9710-e30f660800dd.pdf`. Nunca se usa el nombre que manda el cliente: no hay choques entre archivos ni rutas armadas con datos externos. El nombre original queda en los metadatos y es el que se usa al descargar |
-| Tipos aceptados | `fileFilter` contra `ALLOWED_FILE_TYPES` (mimetype → extensiones). Corre antes de escribir en disco |
+| Tipos aceptados | `fileFilter` contra `ALLOWED_FILE_TYPES` (mimetype → extensiones), antes de escribir en disco. Después, `verifyFileContent` compara los primeros bytes del archivo guardado con `FILE_SIGNATURES` y, si no coinciden con el tipo declarado, lo borra |
 | Tamaño máximo | `limits.fileSize` = 5 MB (`MAX_FILE_SIZE_BYTES`). Además `files: 1`, `fields: 5` y `fieldSize: 1 KB` |
 | Errores de carga | `toUploadError` traduce los `MulterError` a errores del diccionario y, si no llegó ningún archivo, el middleware responde `FILE_REQUIRED`. Todos terminan en el `errorHandler`, con el formato de siempre |
 
@@ -756,6 +759,7 @@ Se validan en este orden. Las tres primeras las hace Multer mientras llega el ar
 | El archivo no supera los 5 MB | `413 FILE_TOO_LARGE` |
 | El archivo llega en el campo esperado (`document` / `proof`) y es uno solo | `400 UNEXPECTED_FILE_FIELD` |
 | Llegó un archivo (y la request es `multipart/form-data`) | `400 FILE_REQUIRED` |
+| El contenido corresponde al tipo declarado (primeros bytes del archivo) | `400 INVALID_FILE_TYPE` (con `details.detected`) |
 | `documentType` es válido (y, en usuarios, que se haya enviado) | `400 INVALID_DOCUMENT_TYPE` |
 | La entidad existe | `404 USER_NOT_FOUND` / `404 DELIVERY_NOT_FOUND` |
 | Se pudo escribir el archivo y registrar los metadatos | `500 FILE_UPLOAD_FAILED` |
@@ -778,6 +782,7 @@ Se validan en este orden. Las tres primeras las hace Multer mientras llega el ar
 | Carga exitosa | `info` | `Documento ID_CARD cargado para el usuario 6afa…ac1: "dni.pdf" → uploads/users/1794…0dd.pdf (application/pdf, 180.0 KB)` |
 | Comprobante asociado a una entrega | `info` | `Comprobante DELIVERY_PHOTO asociado a la entrega 6afa…596: "puerta.jpg" → uploads/deliveries/… (image/jpeg, 240.0 KB)` |
 | Intento de subir un tipo no permitido | `warning` | `Intento de carga con un tipo no permitido en POST /api/users/6afa…ac1/documents: "animacion.gif" (image/gif)` |
+| Contenido que no coincide con el tipo declarado | `warning` | `Intento de carga con un contenido que no coincide con el tipo declarado en POST /api/users/6afa…ac1/documents: "dni.pdf" (declarado application/pdf, detectado desconocido)` |
 | Error al subir (`4xx`) | `warning` | `POST /api/users/6afa…ac1/documents → 413 FILE_TOO_LARGE: El archivo supera el tamaño máximo de 5 MB.` (lo registra el `errorHandler`) |
 | Error al guardar (`5xx`) | `error` | `POST … → 500 FILE_UPLOAD_FAILED: No se pudo guardar el archivo.` con el stack de la causa |
 | Documento registrado cuyo archivo ya no está en disco | `error` | `El documento 6afa…ac2 está en la base pero falta su archivo: uploads/users/…` |
@@ -807,6 +812,8 @@ curl -OJ http://localhost:8080/api/users/<uid>/documents/<docId>/file         # 
 # Errores
 curl -X POST http://localhost:8080/api/users/<uid>/documents -F "documentType=ID_CARD"                                  # 400 FILE_REQUIRED
 curl -X POST http://localhost:8080/api/users/<uid>/documents -F "document=@animacion.gif" -F "documentType=ID_CARD"     # 400 INVALID_FILE_TYPE
+echo "no soy un PDF" > falso.pdf
+curl -X POST http://localhost:8080/api/users/<uid>/documents -F "document=@falso.pdf" -F "documentType=ID_CARD"         # 400 INVALID_FILE_TYPE (contenido)
 curl -X POST http://localhost:8080/api/users/<uid>/documents -F "document=@dni.pdf" -F "documentType=PASAPORTE"         # 400 INVALID_DOCUMENT_TYPE
 curl -X POST http://localhost:8080/api/users/<uid>/documents -F "archivo=@dni.pdf" -F "documentType=ID_CARD"            # 400 UNEXPECTED_FILE_FIELD
 curl -X POST http://localhost:8080/api/users/<uid>/documents -F "document=@grande.pdf" -F "documentType=ID_CARD"        # 413 FILE_TOO_LARGE
@@ -931,7 +938,7 @@ Las tres están en `devDependencies`: no se instalan en producción.
     PATCH /api/orders/:oid/status
       ✔ 409 ORDER_STATUS_TRANSITION_NOT_ALLOWED si salta estados
   ...
-  149 passing (4s)
+  154 passing (4s)
 ```
 
 Para correr una parte: `npm test -- --grep "POST /api/orders"` filtra por el nombre del `describe` o del `it`.
@@ -974,7 +981,7 @@ export const api = request(app); // Supertest la levanta en un puerto temporal p
 
 ### Qué está cubierto
 
-149 tests, con al menos un caso exitoso y uno de error por endpoint:
+154 tests, con al menos un caso exitoso y uno de error por endpoint:
 
 | Archivo | Endpoints | Casos exitosos | Errores validados |
 | ------- | --------- | -------------- | ----------------- |
@@ -983,7 +990,7 @@ export const api = request(app); // Supertest la levanta en un puerto temporal p
 | `deliveries.test.js` | `GET /api/deliveries`, `GET /api/deliveries/:did` | listado con pedido y repartidor populados, filtro por estado | `INVALID_STATUS`, `DELIVERY_NOT_FOUND` |
 | `products.test.js` | `GET/POST /api/products`, `GET/PUT/DELETE /api/products/:pid` | catálogo, alta con estado derivado del stock, edición, baja lógica | `INVALID_STATUS`, `PRODUCT_NOT_FOUND`, `MISSING_REQUIRED_FIELDS`, `INVALID_FIELD_TYPE`, `VALIDATION_ERROR`, `PRODUCT_CODE_ALREADY_EXISTS`, `NO_FIELDS_TO_UPDATE` |
 | `mocks.test.js` | `GET /api/mocks/{users,couriers,orders,deliveries}`, `POST /api/mocks/seed`, `POST /api/mocks/seed/{users,couriers,orders}`, `DELETE /api/mocks/seed` | generación con la cantidad y el rol pedidos (sin escribir en la base), relaciones entre pedidos, clientes, entregas y repartidores, carga en MongoDB, limpieza que conserva los datos reales | `MOCK_INVALID_QUANTITY` (texto, decimal, repetido), `MOCK_NEGATIVE_QUANTITY`, `MOCK_QUANTITY_OUT_OF_RANGE` (0 y 1000), `INVALID_ROLE`, `MOCK_SEED_REQUIREMENTS_NOT_MET` |
-| `uploads.test.js` | `POST/GET /api/users/:uid/documents`, `GET /api/users/:uid/documents/:docId/file`, `POST/GET /api/deliveries/:did/proofs`, `GET /api/deliveries/:did/proofs/:proofId/file` | carga de PDF y JPG con los metadatos guardados y el archivo en disco con el mismo contenido, tipo de documento en minúsculas, tipo de comprobante por defecto, varios documentos por usuario, listado, descarga con el nombre original, borrado de los archivos al eliminar el usuario o los mocks | `FILE_REQUIRED` (sin archivo y con body JSON), `INVALID_FILE_TYPE` (GIF y extensión que no coincide), `FILE_TOO_LARGE`, `UNEXPECTED_FILE_FIELD` (otro campo y dos archivos), `INVALID_DOCUMENT_TYPE` (inexistente y ausente), `USER_NOT_FOUND`, `DELIVERY_NOT_FOUND`, `DOCUMENT_NOT_FOUND` (id ajeno y archivo borrado del disco). En cada error se comprueba que **no quedó ningún archivo** en `uploads/test/` |
+| `uploads.test.js` | `POST/GET /api/users/:uid/documents`, `GET /api/users/:uid/documents/:docId/file`, `POST/GET /api/deliveries/:did/proofs`, `GET /api/deliveries/:did/proofs/:proofId/file` | carga de PDF, JPG y PNG con los metadatos guardados y el archivo en disco con el mismo contenido, tipo de documento en minúsculas, tipo de comprobante por defecto, varios documentos por usuario, listado, **descarga con el nombre original y exactamente el contenido que se subió (byte a byte)**, borrado de los archivos al eliminar el usuario o los mocks | `FILE_REQUIRED` (sin archivo y con body JSON), `INVALID_FILE_TYPE` (GIF, extensión que no coincide, texto con nombre y tipo de PDF, PNG renombrado a `.jpg`, archivo vacío), `FILE_TOO_LARGE`, `UNEXPECTED_FILE_FIELD` (otro campo y dos archivos), `INVALID_DOCUMENT_TYPE` (inexistente y ausente), `USER_NOT_FOUND`, `DELIVERY_NOT_FOUND`, `DOCUMENT_NOT_FOUND` (id ajeno y archivo borrado del disco). En cada error se comprueba que **no quedó ningún archivo** en `uploads/test/` |
 | `logger.test.js` | `GET /api/loggerTest` | niveles registrados y omitidos con `NODE_ENV=test` | `ROUTE_NOT_FOUND` (método inexistente) |
 | `docs.test.js` | `GET /api/docs/`, `GET /api/docs.json` | Swagger UI responde HTML; la spec tiene versión, tags y los endpoints principales; las cargas están documentadas como `multipart/form-data` con el campo del archivo | `ROUTE_NOT_FOUND` (método inexistente) |
 | `app.test.js` | `GET /api/health`, rutas inexistentes | health check | `ROUTE_NOT_FOUND` (dentro y fuera de `/api`), `BAD_REQUEST` (URL mal codificada) |
@@ -1006,7 +1013,7 @@ export const api = request(app); // Supertest la levanta en un puerto temporal p
 - **Datos controlados**: ningún test depende de datos cargados a mano. Cada test crea lo que necesita con los helpers de `tests/helpers/fixtures.js` (por ejemplo, un cliente válido antes de crear un pedido), que usan los generadores del módulo de mocks: todos los usuarios tienen email `@shipnow.test`.
 - **Repetibles**: Faker usa una semilla fija (`tests/setup.js`), así que los datos generados son los mismos en cada corrida.
 - **Limpieza**: cada grupo vacía la base de testing en un `beforeEach` (cada test arranca de cero) y de nuevo en el `after` del grupo; `tests/setup.js` también la vacía al empezar y al terminar la suite. Se usa `deleteMany` sobre cada colección para conservar los índices (como el de email único). Lo mismo con los archivos: `uploads/test/` se borra antes de cada test de carga y al terminar la suite, así **ningún archivo subido durante las pruebas queda en el proyecto**.
-- **Archivos de prueba en memoria**: los PDF, JPG, GIF y el archivo de más de 5 MB se arman con `Buffer` en `tests/helpers/uploads.js` y se envían con `.attach()` de Supertest. No hay archivos de prueba en el repositorio.
+- **Archivos de prueba en memoria**: los PDF, JPG, PNG y GIF (con la firma real de su tipo), los archivos con contenido falso y el de más de 5 MB se arman con `Buffer` en `tests/helpers/uploads.js` y se envían con `.attach()` de Supertest. No hay archivos de prueba en el repositorio.
 - **Independientes del orden**: como cada test prepara sus propios datos sobre una base vacía, la suite pasa igual corrida dos veces seguidas, en otro orden o archivo por archivo.
 
 ### Organización

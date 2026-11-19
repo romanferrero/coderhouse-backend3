@@ -179,6 +179,19 @@ export class InvalidFileTypeError extends AppError {
   }
 }
 
+// El nombre y el tipo declarados son válidos, pero los primeros bytes del archivo no corresponden
+// a ese tipo (un texto llamado dni.pdf, un PNG renombrado a .jpg, un archivo vacío…).
+export class FileContentMismatchError extends AppError {
+  constructor({ fileName, mimeType, detected }) {
+    super(ERRORS.INVALID_FILE_TYPE, {
+      message:
+        `El contenido de "${fileName}" no corresponde a un archivo ${mimeType}` +
+        (detected ? ` (es un ${detected}).` : '.'),
+      details: { fileName, mimeType, detected },
+    });
+  }
+}
+
 export class FileTooLargeError extends AppError {
   constructor({ field, maxSizeBytes }) {
     const maxSizeMB = maxSizeBytes / (1024 * 1024);

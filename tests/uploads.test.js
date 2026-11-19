@@ -10,7 +10,10 @@ import {
   absoluteUploadPath,
   pdfFile,
   jpgFile,
+  pngFile,
   gifFile,
+  fakePdfFile,
+  pngDisguisedAsJpgFile,
   oversizedPdfFile,
   binaryParser,
 } from './helpers/uploads.js';
@@ -112,6 +115,14 @@ describe('Carga de archivos — documentos y comprobantes', () => {
       expect(await listUploads('users')).to.have.lengthOf(2);
     });
 
+    it('acepta imágenes PNG', async () => {
+      const file = pngFile('dni-escaneado.png');
+
+      const payload = expectSuccess(await uploadUserDocument(user._id, file, 'ID_CARD'), 201);
+
+      await expectStoredDocument(payload.documents[0], { file, documentType: 'ID_CARD', folder: 'users' });
+    });
+
     it('400 FILE_REQUIRED si no se envía ningún archivo', async () => {
       const body = expectError(await uploadUserDocument(user._id, null, 'ID_CARD'), 400, 'FILE_REQUIRED');
 
@@ -146,6 +157,35 @@ describe('Carga de archivos — documentos y comprobantes', () => {
       const body = expectError(await uploadUserDocument(user._id, file, 'ID_CARD'), 400, 'INVALID_FILE_TYPE');
 
       expect(body.details).to.include({ fileName: 'dni.exe', mimeType: 'application/pdf' });
+      expect(await listUploads('users')).to.deep.equal([]);
+    });
+
+    // El nombre y el tipo los declara el cliente: la API lee los primeros bytes del archivo.
+    it('400 INVALID_FILE_TYPE si el contenido no es un PDF aunque el nombre y el tipo lo digan', async () => {
+      const body = expectError(await uploadUserDocument(user._id, fakePdfFile(), 'ID_CARD'), 400, 'INVALID_FILE_TYPE');
+
+      expect(body.details).to.deep.equal({ fileName: 'dni.pdf', mimeType: 'application/pdf', detected: null });
+      expect(body.message).to.include('no corresponde a un archivo application/pdf');
+      expect(await listUploads('users')).to.deep.equal([]);
+    });
+
+    it('400 INVALID_FILE_TYPE si es un PNG renombrado a .jpg', async () => {
+      const body = expectError(
+        await uploadUserDocument(user._id, pngDisguisedAsJpgFile(), 'ID_CARD'),
+        400,
+        'INVALID_FILE_TYPE'
+      );
+
+      expect(body.details).to.deep.equal({ fileName: 'foto.jpg', mimeType: 'image/jpeg', detected: 'image/png' });
+      expect(await listUploads('users')).to.deep.equal([]);
+    });
+
+    it('400 INVALID_FILE_TYPE si el archivo está vacío', async () => {
+      const file = { content: Buffer.alloc(0), options: { filename: 'vacio.pdf', contentType: 'application/pdf' } };
+
+      const body = expectError(await uploadUserDocument(user._id, file, 'ID_CARD'), 400, 'INVALID_FILE_TYPE');
+
+      expect(body.details).to.deep.equal({ fileName: 'vacio.pdf', mimeType: 'application/pdf', detected: null });
       expect(await listUploads('users')).to.deep.equal([]);
     });
 
@@ -258,13 +298,15 @@ describe('Carga de archivos — documentos y comprobantes', () => {
       [document] = payload.documents;
     });
 
-    it('descarga el archivo con su nombre original y el mismo contenido', async () => {
+    it('descarga el archivo con su nombre original y exactamente el contenido que se subió', async () => {
       const res = await download(`/api/users/${user._id}/documents/${document._id}/file`);
 
       expect(res.status).to.equal(200);
       expect(res.headers['content-type']).to.match(/application\/pdf/);
       expect(res.headers['content-disposition']).to.equal('attachment; filename="dni.pdf"');
-      expect(res.body.equals(file.content)).to.equal(true);
+      // Byte a byte: el archivo descargado es el mismo Buffer que se envió en el POST.
+      expect(Number(res.headers['content-length'])).to.equal(file.content.length);
+      expect(res.body).to.deep.equal(file.content);
     });
 
     it('404 DOCUMENT_NOT_FOUND si el documento no es del usuario', async () => {
@@ -349,6 +391,17 @@ describe('Carga de archivos — documentos y comprobantes', () => {
       expect(await listUploads('deliveries')).to.deep.equal([]);
     });
 
+    it('400 INVALID_FILE_TYPE si el contenido no corresponde al tipo declarado', async () => {
+      const body = expectError(
+        await uploadDeliveryProof(delivery._id, pngDisguisedAsJpgFile('puerta.jpg')),
+        400,
+        'INVALID_FILE_TYPE'
+      );
+
+      expect(body.details).to.deep.equal({ fileName: 'puerta.jpg', mimeType: 'image/jpeg', detected: 'image/png' });
+      expect(await listUploads('deliveries')).to.deep.equal([]);
+    });
+
     it('413 FILE_TOO_LARGE si el archivo supera los 5 MB', async () => {
       const body = expectError(await uploadDeliveryProof(delivery._id, oversizedPdfFile()), 413, 'FILE_TOO_LARGE');
 
@@ -398,13 +451,15 @@ describe('Carga de archivos — documentos y comprobantes', () => {
       expect(payload).to.deep.equal([proof]);
     });
 
-    it('descarga el comprobante con su nombre original', async () => {
+    it('descarga el comprobante con su nombre original y exactamente el contenido que se subió', async () => {
       const res = await download(`/api/deliveries/${delivery._id}/proofs/${proof._id}/file`);
 
       expect(res.status).to.equal(200);
       expect(res.headers['content-type']).to.match(/image\/jpeg/);
       expect(res.headers['content-disposition']).to.equal('attachment; filename="puerta.jpg"');
-      expect(res.body.equals(file.content)).to.equal(true);
+      // Byte a byte: el archivo descargado es el mismo Buffer que se envió en el POST.
+      expect(Number(res.headers['content-length'])).to.equal(file.content.length);
+      expect(res.body).to.deep.equal(file.content);
     });
 
     it('404 DELIVERY_NOT_FOUND al listar los comprobantes de una entrega inexistente', async () => {

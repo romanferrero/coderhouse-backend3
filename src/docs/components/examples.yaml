@@ -407,6 +407,20 @@ components:
           mimeType: application/pdf
           allowed: [.pdf, .jpg, .jpeg, .png]
 
+    FileContentMismatch:
+      summary: INVALID_FILE_TYPE — el contenido no corresponde al tipo declarado
+      description: >-
+        El nombre y el tipo declarados son válidos, pero los primeros bytes del archivo no son los de ese tipo.
+        `detected` es el tipo real (`application/pdf`, `image/jpeg` o `image/png`) o `null` si no es ninguno.
+      value:
+        status: error
+        code: INVALID_FILE_TYPE
+        message: El contenido de "dni.pdf" no corresponde a un archivo application/pdf.
+        details:
+          fileName: dni.pdf
+          mimeType: application/pdf
+          detected: null
+
     UserDocumentUnexpectedField:
       summary: UNEXPECTED_FILE_FIELD — el archivo llegó en otro campo
       value:

@@ -14,15 +14,18 @@ paths:
 
 
         **Archivo**: PDF, JPG o PNG (`application/pdf`, `image/jpeg`, `image/png`), de hasta **5 MB**. Se exige que
-        la extensión coincida con el tipo declarado.
+        la extensión coincida con el tipo declarado y que el **contenido** también: se leen los primeros bytes
+        del archivo (su firma) y tienen que ser los de ese tipo. Un texto llamado `dni.pdf` y enviado como
+        `application/pdf`, o un PNG renombrado a `.jpg`, se rechaza.
 
         **Tipos de documento**: `ID_CARD` (DNI), `DRIVER_LICENSE` (licencia de conducir) o `PROOF_OF_ADDRESS`
         (comprobante de domicilio). Obligatorio; acepta minúsculas.
 
 
         Validaciones, en este orden: tipo de archivo y tamaño (mientras llega el archivo, sin guardarlo si no
-        cumple), campo del archivo, que haya llegado un archivo, tipo de documento y que el usuario exista. Si falla
-        alguna validación posterior a guardarlo, el archivo se borra: nunca queda un archivo sin su usuario.
+        cumple), campo del archivo, que haya llegado un archivo, que su contenido corresponda al tipo declarado,
+        tipo de documento y que el usuario exista. Si falla alguna validación posterior a guardarlo, el archivo se
+        borra: nunca queda un archivo sin su usuario.
       operationId: uploadUserDocument
       requestBody:
         required: true
@@ -58,6 +61,8 @@ paths:
                   $ref: '#/components/examples/InvalidFileType'
                 ExtensionMismatch:
                   $ref: '#/components/examples/FileExtensionMismatch'
+                ContentMismatch:
+                  $ref: '#/components/examples/FileContentMismatch'
                 UnexpectedField:
                   $ref: '#/components/examples/UserDocumentUnexpectedField'
                 TooManyFiles:
@@ -167,7 +172,9 @@ paths:
 
 
         **Archivo**: PDF, JPG o PNG (`application/pdf`, `image/jpeg`, `image/png`), de hasta **5 MB**. Se exige que
-        la extensión coincida con el tipo declarado.
+        la extensión coincida con el tipo declarado y que el **contenido** también: se leen los primeros bytes
+        del archivo (su firma) y tienen que ser los de ese tipo. Un texto llamado `dni.pdf` y enviado como
+        `application/pdf`, o un PNG renombrado a `.jpg`, se rechaza.
 
         **Tipos de comprobante**: `DELIVERY_PHOTO` (foto de la entrega, el valor por defecto) o `SIGNED_RECEIPT`
         (remito firmado). Acepta minúsculas.
@@ -212,6 +219,8 @@ paths:
                   $ref: '#/components/examples/InvalidFileType'
                 ExtensionMismatch:
                   $ref: '#/components/examples/FileExtensionMismatch'
+                ContentMismatch:
+                  $ref: '#/components/examples/FileContentMismatch'
                 UnexpectedField:
                   $ref: '#/components/examples/DeliveryProofUnexpectedField'
                 InvalidDocumentType:
