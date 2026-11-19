@@ -30,6 +30,8 @@ describe('Usuarios — /api/users', () => {
       payload.docs.forEach((user) => {
         expectPublicUser(user);
         expect(ALL_ROLES).to.include(user.role);
+        // Los documentos no viajan en el listado: se consultan con GET /api/users/:uid/documents.
+        expect(user).to.not.have.property('documents');
       });
     });
 

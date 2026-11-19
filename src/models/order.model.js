@@ -43,4 +43,11 @@ const orderSchema = new Schema(
   { timestamps: true, versionKey: false }
 );
 
+// Índices para el listado (GET /api/orders, filtros por estado y prioridad, orden por fecha) y para
+// buscar los pedidos de un cliente.
+orderSchema.index({ createdAt: -1 });
+orderSchema.index({ status: 1, createdAt: -1 });
+orderSchema.index({ priority: 1, createdAt: -1 });
+orderSchema.index({ customer: 1 });
+
 export const OrderModel = model('Order', orderSchema);

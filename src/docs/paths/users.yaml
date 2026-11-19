@@ -3,7 +3,9 @@ paths:
     get:
       tags: [Users]
       summary: Lista usuarios
-      description: Lista paginada de usuarios, del más nuevo al más viejo. Se puede filtrar por rol.
+      description: >-
+        Lista paginada de usuarios, del más nuevo al más viejo (10 por página por defecto, 100 como máximo).
+        Se puede filtrar por rol. Para que cada página pese poco, los usuarios del listado no incluyen `documents`.
       operationId: getUsers
       parameters:
         - $ref: '#/components/parameters/Page'

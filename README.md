@@ -668,7 +668,7 @@ La API recibe **documentos de usuario** y **comprobantes de entrega** como `mult
 | GET    | `/api/deliveries/:did/proofs` | — | Metadatos de los comprobantes de la entrega |
 | GET    | `/api/deliveries/:did/proofs/:proofId/file` | — | El archivo, con su nombre original |
 
-`GET /api/users/:uid` y `GET /api/deliveries/:did` también devuelven los `documents` y `proofs` de la entidad.
+`GET /api/users/:uid` y `GET /api/deliveries/:did` también devuelven los `documents` y `proofs` de la entidad. Los listados (`GET /api/users`, `GET /api/deliveries`) no los incluyen, para que cada página pese poco.
 
 ### Qué tipos y tamaños aceptan
 

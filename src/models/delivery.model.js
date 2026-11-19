@@ -31,4 +31,10 @@ const deliverySchema = new Schema(
   { timestamps: true, versionKey: false }
 );
 
+// Índices para el listado (GET /api/deliveries, filtro por estado, orden por fecha) y para buscar
+// las entregas de un repartidor.
+deliverySchema.index({ createdAt: -1 });
+deliverySchema.index({ status: 1, createdAt: -1 });
+deliverySchema.index({ courier: 1 });
+
 export const DeliveryModel = model('Delivery', deliverySchema);

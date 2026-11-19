@@ -33,6 +33,8 @@ describe('Entregas — /api/deliveries', () => {
       expect(delivery.order).to.include({ _id: order._id, code: order.code, status: 'IN_TRANSIT' });
       expect(delivery.courier).to.include({ _id: courier._id, email: courier.email, role: 'COURIER' });
       expect(delivery.courier).to.not.have.property('password');
+      // Los comprobantes no viajan en el listado: se consultan con GET /api/deliveries/:did/proofs.
+      expect(delivery).to.not.have.property('proofs');
     });
 
     it('filtra por estado (acepta minúsculas)', async () => {

@@ -4,13 +4,17 @@ import { DeliveryModel } from '../models/delivery.model.js';
 const ORDER_PROJECTION = 'code status priority total customer';
 const COURIER_PROJECTION = 'first_name last_name email role';
 
+// En el listado no van los comprobantes: crecen con cada carga y se consultan por entrega
+// (GET /api/deliveries/:did/proofs).
+const LIST_PROJECTION = '-proofs';
+
 const populateRelations = (query) =>
   query.populate('order', ORDER_PROJECTION).populate('courier', COURIER_PROJECTION);
 
 class DeliveryRepository {
   async findAll({ filter = {}, page = 1, limit = 10, sort = { createdAt: -1 } } = {}) {
     const [docs, total] = await Promise.all([
-      populateRelations(DeliveryModel.find(filter))
+      populateRelations(DeliveryModel.find(filter, LIST_PROJECTION))
         .sort(sort)
         .skip((page - 1) * limit)
         .limit(limit)

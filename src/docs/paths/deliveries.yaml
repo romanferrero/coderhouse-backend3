@@ -5,7 +5,8 @@ paths:
       summary: Lista entregas
       description: >-
         Lista paginada de entregas, de la más nueva a la más vieja, con los datos principales del pedido
-        y del repartidor. Se puede filtrar por estado.
+        y del repartidor (10 por página por defecto, 100 como máximo). Se puede filtrar por estado. Para que cada
+        página pese poco, las entregas del listado no incluyen `proofs`.
       operationId: getDeliveries
       parameters:
         - $ref: '#/components/parameters/Page'

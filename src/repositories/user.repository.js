@@ -3,11 +3,14 @@ import { UserModel } from '../models/user.model.js';
 
 // El hash de la contraseña nunca sale del repositorio salvo que se pida explícitamente.
 const PUBLIC_PROJECTION = 'first_name last_name email age role documents createdAt';
+// En el listado no van los documentos: crecen con cada carga y se consultan por usuario
+// (GET /api/users/:uid/documents). Así cada página pesa lo mismo tenga cada usuario 0 o 10 documentos.
+const LIST_PROJECTION = 'first_name last_name email age role createdAt';
 
 class UserRepository {
   async findAll({ filter = {}, page = 1, limit = 10, sort = { createdAt: -1 } } = {}) {
     const [docs, total] = await Promise.all([
-      UserModel.find(filter, PUBLIC_PROJECTION)
+      UserModel.find(filter, LIST_PROJECTION)
         .sort(sort)
         .skip((page - 1) * limit)
         .limit(limit)

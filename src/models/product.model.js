@@ -18,4 +18,9 @@ const productSchema = new Schema(
   { timestamps: true, versionKey: false }
 );
 
+// Índices para el catálogo (GET /api/products): siempre filtra por estado y ordena por fecha,
+// y opcionalmente filtra por categoría.
+productSchema.index({ status: 1, createdAt: -1 });
+productSchema.index({ category: 1, status: 1, createdAt: -1 });
+
 export const ProductModel = model('Product', productSchema);

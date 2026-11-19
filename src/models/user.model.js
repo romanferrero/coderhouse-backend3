@@ -20,4 +20,9 @@ const userSchema = new Schema(
   { timestamps: true, versionKey: false }
 );
 
+// Índices para el listado (GET /api/users): orden por fecha de alta, con o sin filtro por rol.
+// Sin ellos, MongoDB recorre y ordena toda la colección en cada página.
+userSchema.index({ createdAt: -1 });
+userSchema.index({ role: 1, createdAt: -1 });
+
 export const UserModel = model('User', userSchema);
