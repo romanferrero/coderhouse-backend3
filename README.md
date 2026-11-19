@@ -923,11 +923,14 @@ Las tres están en `devDependencies`: no se instalan en producción.
    cp .env.test.example .env.test
    ```
 
-3. Correr la suite:
+3. Instalar las dependencias **incluidas las de desarrollo** (Mocha, Chai y Supertest están en `devDependencies`) y correr la suite:
 
    ```bash
+   npm install --include=dev
    npm test
    ```
+
+   `--include=dev` asegura que se instalen aunque la terminal tenga `NODE_ENV=production` o npm esté configurado con `omit=dev`: en esos casos un `npm install` solo omite las `devDependencies` y `npm test` falla con `mocha: not found`.
 
 ```
   Pedidos — /api/orders
