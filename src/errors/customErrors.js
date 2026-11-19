@@ -230,6 +230,16 @@ export class DocumentNotFoundError extends AppError {
   }
 }
 
+// El usuario o la entrega ya tiene la cantidad máxima de archivos (MAX_DOCUMENTS_PER_ENTITY).
+export class DocumentLimitReachedError extends AppError {
+  constructor({ entity, id, max }) {
+    super(ERRORS.DOCUMENT_LIMIT_REACHED, {
+      message: `${entity === 'user' ? 'El usuario' : 'La entrega'} "${id}" ya tiene el máximo de ${max} archivos.`,
+      details: { entity, id, max },
+    });
+  }
+}
+
 // Los metadatos están en la base pero el archivo ya no está en el servidor (se borró a mano).
 export class DocumentFileMissingError extends AppError {
   constructor(id) {

@@ -81,6 +81,11 @@ export const ERROR_DICTIONARY = Object.freeze({
     'El tipo de documento indicado no es válido.'
   ),
   DOCUMENT_NOT_FOUND: define('DOCUMENT_NOT_FOUND', HTTP_STATUS.NOT_FOUND, 'Documento no encontrado.'),
+  DOCUMENT_LIMIT_REACHED: define(
+    'DOCUMENT_LIMIT_REACHED',
+    HTTP_STATUS.CONFLICT,
+    'Se alcanzó la cantidad máxima de archivos permitida.'
+  ),
   FILE_UPLOAD_FAILED: define(
     'FILE_UPLOAD_FAILED',
     HTTP_STATUS.INTERNAL_SERVER_ERROR,

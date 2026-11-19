@@ -24,8 +24,8 @@ paths:
 
         Validaciones, en este orden: tipo de archivo y tamaño (mientras llega el archivo, sin guardarlo si no
         cumple), campo del archivo, que haya llegado un archivo, que su contenido corresponda al tipo declarado,
-        tipo de documento y que el usuario exista. Si falla alguna validación posterior a guardarlo, el archivo se
-        borra: nunca queda un archivo sin su usuario.
+        tipo de documento, que el usuario exista y que no tenga ya **10 documentos** (el máximo). Si falla alguna
+        validación posterior a guardarlo, el archivo se borra: nunca queda un archivo sin su usuario.
       operationId: uploadUserDocument
       requestBody:
         required: true
@@ -75,6 +75,15 @@ paths:
                   $ref: '#/components/examples/MultipartMalformed'
         '404':
           $ref: '#/components/responses/UserNotFound'
+        '409':
+          description: El usuario ya tiene el máximo de 10 archivos. El archivo recibido se borra.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                DocumentLimitReached:
+                  $ref: '#/components/examples/UserDocumentLimitReached'
         '413':
           description: El archivo supera los 5 MB. No se guarda nada.
           content:
@@ -180,8 +189,8 @@ paths:
         (remito firmado). Acepta minúsculas.
 
 
-        Mismas validaciones que los documentos de usuario, con la entrega en lugar del usuario. Si falla alguna
-        validación posterior a guardarlo, el archivo se borra.
+        Mismas validaciones que los documentos de usuario, con la entrega en lugar del usuario (máximo **10
+        comprobantes** por entrega). Si falla alguna validación posterior a guardarlo, el archivo se borra.
       operationId: uploadDeliveryProof
       requestBody:
         required: true
@@ -229,6 +238,15 @@ paths:
                   $ref: '#/components/examples/MultipartMalformed'
         '404':
           $ref: '#/components/responses/DeliveryNotFound'
+        '409':
+          description: La entrega ya tiene el máximo de 10 archivos. El archivo recibido se borra.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                DocumentLimitReached:
+                  $ref: '#/components/examples/DeliveryProofLimitReached'
         '413':
           description: El archivo supera los 5 MB. No se guarda nada.
           content:

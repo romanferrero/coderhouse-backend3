@@ -271,6 +271,7 @@ Cada error que pasa por el middleware queda registrado con el logger: los `4xx` 
 | `UNEXPECTED_FILE_FIELD`          | 400  | El archivo llegó en otro campo, o llegó más de uno |
 | `INVALID_DOCUMENT_TYPE`          | 400  | `documentType` ausente (en documentos de usuario) o fuera de los tipos permitidos |
 | `DOCUMENT_NOT_FOUND`             | 404  | La entidad no tiene ese documento, o su archivo ya no está en el servidor |
+| `DOCUMENT_LIMIT_REACHED`         | 409  | El usuario o la entrega ya tiene el máximo de 10 archivos (`MAX_DOCUMENTS_PER_ENTITY`) |
 | `FILE_UPLOAD_FAILED`             | 500  | Falla del disco o de MongoDB al guardar el archivo o sus metadatos |
 | `USER_EMAIL_ALREADY_REGISTERED`  | 409  | Email ya registrado |
 | `PRODUCT_CODE_ALREADY_EXISTS`    | 409  | Código de producto repetido |
@@ -679,6 +680,7 @@ La API recibe **documentos de usuario** y **comprobantes de entrega** como `mult
 | Tipos de archivo                 | PDF, JPG/JPEG o PNG   | PDF, JPG/JPEG o PNG     |
 | Tamaño máximo                    | **5 MB**              | **5 MB**                |
 | Archivos por carga               | 1                     | 1                       |
+| Máximo por entidad               | **10** por usuario    | **10** por entrega      |
 | Carpeta                          | `uploads/users/`      | `uploads/deliveries/`   |
 
 `documentType` acepta minúsculas (`id_card` = `ID_CARD`). El tipo de archivo se valida en dos pasos:
@@ -768,6 +770,7 @@ Se validan en este orden. Las tres primeras las hace Multer mientras llega el ar
 | El contenido corresponde al tipo declarado (primeros bytes del archivo) | `400 INVALID_FILE_TYPE` (con `details.detected`) |
 | `documentType` es válido (y, en usuarios, que se haya enviado) | `400 INVALID_DOCUMENT_TYPE` |
 | La entidad existe | `404 USER_NOT_FOUND` / `404 DELIVERY_NOT_FOUND` |
+| La entidad tiene menos de 10 archivos (`MAX_DOCUMENTS_PER_ENTITY`) | `409 DOCUMENT_LIMIT_REACHED` |
 | Se pudo escribir el archivo y registrar los metadatos | `500 FILE_UPLOAD_FAILED` |
 | Descarga: la entidad tiene ese documento y su archivo sigue en el servidor | `404 DOCUMENT_NOT_FOUND` |
 | El body multipart llegó bien formado | `400 BAD_REQUEST` |
@@ -947,7 +950,7 @@ Las tres están en `devDependencies`: no se instalan en producción.
     PATCH /api/orders/:oid/status
       ✔ 409 ORDER_STATUS_TRANSITION_NOT_ALLOWED si salta estados
   ...
-  154 passing (4s)
+  181 passing (5s)
 ```
 
 Para correr una parte: `npm test -- --grep "POST /api/orders"` filtra por el nombre del `describe` o del `it`.
@@ -990,7 +993,7 @@ export const api = request(app); // Supertest la levanta en un puerto temporal p
 
 ### Qué está cubierto
 
-154 tests, con al menos un caso exitoso y uno de error por endpoint:
+181 tests, con al menos un caso exitoso y uno de error por endpoint:
 
 | Archivo | Endpoints | Casos exitosos | Errores validados |
 | ------- | --------- | -------------- | ----------------- |
@@ -1092,7 +1095,8 @@ DELIVERY_STATUS_BY_ORDER_STATUS  // estado de la entrega según el del pedido
 DELIVERY_STATUSES_WITH_COURIER   // estados que exigen repartidor
 USER_DOCUMENT_TYPES  = { ID_CARD, DRIVER_LICENSE, PROOF_OF_ADDRESS }
 DELIVERY_PROOF_TYPES = { DELIVERY_PHOTO, SIGNED_RECEIPT }   // DEFAULT_DELIVERY_PROOF_TYPE = DELIVERY_PHOTO
-HTTP_STATUS     = { OK, CREATED, NO_CONTENT, BAD_REQUEST, FORBIDDEN, NOT_FOUND, CONFLICT, PAYLOAD_TOO_LARGE, INTERNAL_SERVER_ERROR }
+MAX_DOCUMENTS_PER_ENTITY = 10    // archivos por usuario o por entrega
+HTTP_STATUS     = { OK, CREATED, NO_CONTENT, BAD_REQUEST, FORBIDDEN, NOT_FOUND, CONFLICT, PAYLOAD_TOO_LARGE, INTERNAL_SERVER_ERROR, SERVICE_UNAVAILABLE }
 PAGINATION      = { DEFAULT_LIMIT, MAX_LIMIT }
 MOCKS           = { DEFAULT_QTY, MAX_QTY, EMAIL_DOMAIN, PASSWORD, RANDOM_ROLES, DATASET }
 ```

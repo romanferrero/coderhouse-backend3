@@ -75,6 +75,10 @@ export const DELIVERY_PROOF_TYPES = Object.freeze({
 });
 export const DEFAULT_DELIVERY_PROOF_TYPE = DELIVERY_PROOF_TYPES.DELIVERY_PHOTO;
 
+// Máximo de archivos por usuario (documentos) y por entrega (comprobantes). Los metadatos van dentro
+// del usuario o la entrega: sin un tope, ese array (y el disco) crecería sin control con cada carga.
+export const MAX_DOCUMENTS_PER_ENTITY = 10;
+
 export const HTTP_STATUS = Object.freeze({
   OK: 200,
   CREATED: 201,

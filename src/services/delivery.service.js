@@ -44,7 +44,8 @@ class DeliveryService {
       const type = this.documents.parseDocumentType(documentType, VALID_PROOF_TYPES, {
         defaultType: DEFAULT_DELIVERY_PROOF_TYPE,
       });
-      await this.getDeliveryById(id);
+      const existing = await this.getDeliveryById(id);
+      this.documents.ensureCapacity(existing.proofs, { entity: 'delivery', id });
 
       const metadata = this.documents.buildMetadata(file, type);
       const delivery = await this.documents.persist(() => this.repository.addProof(id, metadata));

@@ -461,6 +461,28 @@ components:
           received: PASAPORTE
           allowed: [ID_CARD, DRIVER_LICENSE, PROOF_OF_ADDRESS]
 
+    UserDocumentLimitReached:
+      summary: DOCUMENT_LIMIT_REACHED — el usuario ya tiene 10 documentos
+      value:
+        status: error
+        code: DOCUMENT_LIMIT_REACHED
+        message: 'El usuario "6716a0f3c2b1e4a5d6f70812" ya tiene el máximo de 10 archivos.'
+        details:
+          entity: user
+          id: 6716a0f3c2b1e4a5d6f70812
+          max: 10
+
+    DeliveryProofLimitReached:
+      summary: DOCUMENT_LIMIT_REACHED — la entrega ya tiene 10 comprobantes
+      value:
+        status: error
+        code: DOCUMENT_LIMIT_REACHED
+        message: 'La entrega "6716a0f3c2b1e4a5d6f70950" ya tiene el máximo de 10 archivos.'
+        details:
+          entity: delivery
+          id: 6716a0f3c2b1e4a5d6f70950
+          max: 10
+
     UserDocumentTypeMissing:
       summary: INVALID_DOCUMENT_TYPE — no se envió documentType
       value:

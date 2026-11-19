@@ -17,11 +17,14 @@ import {
   oversizedPdfFile,
   binaryParser,
 } from './helpers/uploads.js';
+import { UserModel } from '../src/models/user.model.js';
+import { DeliveryModel } from '../src/models/delivery.model.js';
 
 const USER_DOCUMENT_TYPES = ['ID_CARD', 'DRIVER_LICENSE', 'PROOF_OF_ADDRESS'];
 const DELIVERY_PROOF_TYPES = ['DELIVERY_PHOTO', 'SIGNED_RECEIPT'];
 const ALLOWED_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png'];
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_DOCUMENTS_PER_ENTITY = 10;
 // Nombre generado por el servidor: fecha en milisegundos + UUID + extensión.
 const GENERATED_NAME = /^\d{13}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(pdf|jpg|jpeg|png)$/;
 
@@ -61,6 +64,17 @@ const uploadDeliveryProof = (did, file, documentType) => {
   if (documentType !== undefined) req.field('documentType', documentType);
   return file ? req.attach('proof', file.content, file.options) : req;
 };
+
+// Metadatos de archivos ya cargados, insertados directo en la base para llegar al máximo sin subir 10 archivos.
+const storedDocuments = (folder, documentType, qty = MAX_DOCUMENTS_PER_ENTITY) =>
+  Array.from({ length: qty }, (_, i) => ({
+    documentType,
+    originalName: `archivo-${i}.pdf`,
+    fileName: `archivo-${i}.pdf`,
+    path: `uploads/test/${folder}/archivo-${i}.pdf`,
+    mimeType: 'application/pdf',
+    size: 100,
+  }));
 
 const download = (url) => api.get(url).buffer(true).parse(binaryParser);
 
@@ -258,6 +272,17 @@ describe('Carga de archivos — documentos y comprobantes', () => {
       expect(body.details).to.deep.equal({ id: NON_EXISTENT_ID });
       expect(await listUploads('users')).to.deep.equal([]);
     });
+
+    it('409 DOCUMENT_LIMIT_REACHED si el usuario ya tiene 10 documentos y borra el archivo', async () => {
+      await UserModel.updateOne({ _id: user._id }, { documents: storedDocuments('users', 'ID_CARD') });
+
+      const body = expectError(await uploadUserDocument(user._id, pdfFile(), 'ID_CARD'), 409, 'DOCUMENT_LIMIT_REACHED');
+
+      expect(body.details).to.deep.equal({ entity: 'user', id: user._id, max: MAX_DOCUMENTS_PER_ENTITY });
+      expect(await listUploads('users')).to.deep.equal([]);
+      const stored = expectSuccess(await api.get(`/api/users/${user._id}/documents`), 200);
+      expect(stored).to.have.lengthOf(MAX_DOCUMENTS_PER_ENTITY);
+    });
   });
 
   describe('GET /api/users/:uid/documents', () => {
@@ -428,6 +453,15 @@ describe('Carga de archivos — documentos y comprobantes', () => {
       );
 
       expect(body.details).to.deep.equal({ id: NON_EXISTENT_ID });
+      expect(await listUploads('deliveries')).to.deep.equal([]);
+    });
+
+    it('409 DOCUMENT_LIMIT_REACHED si la entrega ya tiene 10 comprobantes y borra el archivo', async () => {
+      await DeliveryModel.updateOne({ _id: delivery._id }, { proofs: storedDocuments('deliveries', 'DELIVERY_PHOTO') });
+
+      const body = expectError(await uploadDeliveryProof(delivery._id, jpgFile()), 409, 'DOCUMENT_LIMIT_REACHED');
+
+      expect(body.details).to.deep.equal({ entity: 'delivery', id: delivery._id, max: MAX_DOCUMENTS_PER_ENTITY });
       expect(await listUploads('deliveries')).to.deep.equal([]);
     });
   });

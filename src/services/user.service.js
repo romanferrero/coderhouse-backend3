@@ -157,7 +157,8 @@ class UserService {
   async addDocument(id, { file, documentType }) {
     try {
       const type = this.documents.parseDocumentType(documentType, VALID_DOCUMENT_TYPES);
-      await this.getUserById(id);
+      const existing = await this.getUserById(id);
+      this.documents.ensureCapacity(existing.documents, { entity: 'user', id });
 
       const metadata = this.documents.buildMetadata(file, type);
       const user = await this.documents.persist(() => this.repository.addDocument(id, metadata));

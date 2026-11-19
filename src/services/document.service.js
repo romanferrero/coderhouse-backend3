@@ -1,6 +1,8 @@
 import logger from '../logger/index.js';
+import { MAX_DOCUMENTS_PER_ENTITY } from '../constants/index.js';
 import {
   DocumentFileMissingError,
+  DocumentLimitReachedError,
   DocumentNotFoundError,
   FileUploadFailedError,
   InvalidDocumentTypeError,
@@ -23,6 +25,14 @@ class DocumentService {
     const normalized = typeof value === 'string' ? value.trim().toUpperCase() : null;
     if (!allowed.includes(normalized)) throw new InvalidDocumentTypeError(value, allowed);
     return normalized;
+  }
+
+  // Cada entidad acepta como máximo MAX_DOCUMENTS_PER_ENTITY archivos. Se controla después de que Multer
+  // guardó el archivo (antes no se conoce la entidad): si se rechaza, el service lo borra.
+  ensureCapacity(documents = [], { entity, id }) {
+    if (documents.length >= MAX_DOCUMENTS_PER_ENTITY) {
+      throw new DocumentLimitReachedError({ entity, id, max: MAX_DOCUMENTS_PER_ENTITY });
+    }
   }
 
   // Lo que se guarda en MongoDB. El archivo queda en disco: en la base van solo sus metadatos.

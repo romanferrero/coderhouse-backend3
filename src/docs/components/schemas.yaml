@@ -92,6 +92,7 @@ components:
         - UNEXPECTED_FILE_FIELD
         - INVALID_DOCUMENT_TYPE
         - DOCUMENT_NOT_FOUND
+        - DOCUMENT_LIMIT_REACHED
         - FILE_UPLOAD_FAILED
         - MOCK_INVALID_QUANTITY
         - MOCK_NEGATIVE_QUANTITY
@@ -215,7 +216,9 @@ components:
           $ref: '#/components/schemas/UserRole'
         documents:
           type: array
-          description: Metadatos de los documentos subidos con `POST /api/users/{uid}/documents` (vacío si no tiene).
+          description: >-
+            Metadatos de los documentos subidos con `POST /api/users/{uid}/documents` (vacío si no tiene; máximo 10).
+            **No se incluye en el listado** (`GET /api/users`): se consulta con `GET /api/users/{uid}/documents`.
           items:
             $ref: '#/components/schemas/UserDocument'
         createdAt:
@@ -558,7 +561,9 @@ components:
           example: null
         proofs:
           type: array
-          description: Metadatos de los comprobantes subidos con `POST /api/deliveries/{did}/proofs` (vacío si no tiene).
+          description: >-
+            Metadatos de los comprobantes subidos con `POST /api/deliveries/{did}/proofs` (vacío si no tiene; máximo 10).
+            **No se incluye en el listado** (`GET /api/deliveries`): se consulta con `GET /api/deliveries/{did}/proofs`.
           items:
             $ref: '#/components/schemas/DeliveryProof'
         createdAt:
