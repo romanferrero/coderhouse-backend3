@@ -28,6 +28,16 @@ export const connectDB = async () => {
   watchConnection();
 };
 
+// Estado de la conexión en palabras (para el health check). No incluye host, base ni credenciales.
+const STATE_NAMES = Object.freeze({
+  [mongoose.ConnectionStates.connected]: 'connected',
+  [mongoose.ConnectionStates.connecting]: 'connecting',
+  [mongoose.ConnectionStates.disconnecting]: 'disconnecting',
+  [mongoose.ConnectionStates.disconnected]: 'disconnected',
+});
+
+export const getDatabaseStatus = () => STATE_NAMES[mongoose.connection.readyState] ?? 'disconnected';
+
 // Cierre intencional: se quita el aviso de desconexión para no registrarlo como una caída.
 export const disconnectDB = async () => {
   const wasConnected = mongoose.connection.readyState === mongoose.ConnectionStates.connected;

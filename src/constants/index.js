@@ -85,6 +85,7 @@ export const HTTP_STATUS = Object.freeze({
   CONFLICT: 409,
   PAYLOAD_TOO_LARGE: 413,
   INTERNAL_SERVER_ERROR: 500,
+  SERVICE_UNAVAILABLE: 503,
 });
 
 export const PAGINATION = Object.freeze({

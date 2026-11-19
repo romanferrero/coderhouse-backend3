@@ -4,11 +4,22 @@ import { expectError } from './helpers/assertions.js';
 
 // Rutas generales de la app. No usan la base de datos: no hay nada que limpiar.
 describe('App — health y rutas inexistentes', () => {
-  it('GET /api/health responde que el servidor está levantado', async () => {
+  it('GET /api/health informa estado, entorno, uptime, hora y conexión a MongoDB', async () => {
     const res = await api.get('/api/health');
 
     expect(res.status).to.equal(200);
-    expect(res.body).to.deep.equal({ status: 'ok' });
+    expect(res.body).to.have.all.keys('status', 'environment', 'uptime', 'timestamp', 'database');
+    expect(res.body).to.include({ status: 'ok', environment: 'test', database: 'connected' });
+    expect(res.body.uptime).to.be.a('number').and.to.be.at.least(0);
+    expect(new Date(res.body.timestamp).getTime()).to.be.closeTo(Date.now(), 10_000);
+  });
+
+  it('GET /api/health no expone datos sensibles (URI, host ni variables de entorno)', async () => {
+    const { text } = await api.get('/api/health');
+
+    expect(text).to.not.include('mongodb');
+    expect(text).to.not.include('localhost');
+    expect(text).to.not.include('MONGODB_URI');
   });
 
   it('404 ROUTE_NOT_FOUND con una ruta inexistente', async () => {

@@ -133,6 +133,31 @@ components:
           example:
             id: '6650f1a2b3c4d5e6f7a8b9c0'
 
+    HealthStatus:
+      type: object
+      description: Respuesta del health check. Sin datos sensibles.
+      required: [status, environment, uptime, timestamp, database]
+      properties:
+        status:
+          type: string
+          enum: [ok, error]
+          description: '`ok` si la API puede atender requests; `error` si perdió la conexión con MongoDB.'
+        environment:
+          type: string
+          enum: [development, production, test]
+          description: Valor de `NODE_ENV`.
+        uptime:
+          type: integer
+          description: Segundos desde que arrancó el proceso.
+        timestamp:
+          type: string
+          format: date-time
+          description: Fecha y hora del servidor (ISO 8601, UTC).
+        database:
+          type: string
+          enum: [connected, connecting, disconnecting, disconnected]
+          description: Estado de la conexión con MongoDB (sin host ni URI).
+
     PaginatedResult:
       type: object
       description: Resultado de los listados. `docs` contiene los elementos de la página pedida.

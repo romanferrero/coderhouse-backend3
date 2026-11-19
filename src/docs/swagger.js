@@ -63,7 +63,7 @@ const definition = {
     },
     { name: 'Logger', description: 'Herramienta interna para validar el logging. No es una funcionalidad del negocio' },
     { name: 'Products', description: 'Catálogo de productos' },
-    { name: 'Health', description: 'Estado del servidor' },
+    { name: 'Health', description: 'Estado de la API para monitoreo (health check)' },
   ],
 };
 

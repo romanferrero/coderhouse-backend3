@@ -142,7 +142,7 @@ La información general (nombre, versión tomada del `package.json`, descripció
 | `Mocks`      | `GET /api/mocks/{users,couriers,orders,deliveries}`, `POST /api/mocks/seed`, `POST /api/mocks/seed/{users,couriers,orders}`, `DELETE /api/mocks/seed` | Separa lo que solo genera datos (GET) de lo que escribe en MongoDB (POST/DELETE) |
 | `Logger`     | `GET /api/loggerTest` | Aclarado como herramienta de validación, no funcionalidad de negocio |
 | `Products`   | `GET/POST /api/products`, `GET/PUT/DELETE /api/products/{pid}` | Catálogo |
-| `Health`     | `GET /api/health` | Estado del servidor |
+| `Health`     | `GET /api/health` | Estado de la API (health check): `200` o `503` sin conexión a MongoDB |
 
 Cada endpoint indica método, ruta, descripción, parámetros de ruta y de query, body esperado (si lleva), la respuesta exitosa con su schema y **todas las respuestas de error que puede devolver**, con un ejemplo por cada `code` posible (por ejemplo, el `400` de `POST /api/users` muestra `MISSING_REQUIRED_FIELDS`, `INVALID_FIELD_TYPE`, los tres `VALIDATION_ERROR` e `INVALID_JSON`).
 
